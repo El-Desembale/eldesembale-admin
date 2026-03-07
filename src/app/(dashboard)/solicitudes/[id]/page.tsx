@@ -157,6 +157,9 @@ export default function LoanDetailPage() {
       <div className="bg-[#0d1f0d] border border-[#2FFF00]/20 rounded-2xl p-6 mb-4">
         <div className="flex justify-between items-start mb-4">
           <div>
+            {clientInfo?.name && (
+              <p className="text-white font-semibold text-lg mb-1">{clientInfo.name}</p>
+            )}
             <p className="text-[#2FFF00] text-3xl font-bold">{amount}</p>
             <p className="text-gray-400 text-sm mt-1">{loan.phone}</p>
           </div>
