@@ -111,7 +111,7 @@ export default function UserDetailPage() {
       ) : (
         <div className="grid gap-3 sm:grid-cols-2">
           {loans.map(loan => (
-            <LoanCard key={loan.id} loan={loan} />
+            <LoanCard key={loan.id} loan={loan} userName={[user.name, user.lastName].filter(Boolean).join(' ') || undefined} />
           ))}
         </div>
       )}

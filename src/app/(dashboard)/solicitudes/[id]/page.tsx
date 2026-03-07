@@ -3,12 +3,14 @@
 import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { doc, getDoc, Timestamp } from 'firebase/firestore';
+import { doc, getDoc, query, collection, where, getDocs, Timestamp } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { updateLoanStatus } from '@/lib/firestore';
 import { LoanRequest } from '@/lib/types';
+import { isInMora, getDaysOverdue } from '@/lib/mora';
 import { StatusBadge } from '@/components/StatusBadge';
 import { LoanDocumentsDialog } from '@/components/LoanDocumentsDialog';
+import { ReminderDialog } from '@/components/ReminderDialog';
 
 const ACTION_STATUSES: { label: string; value: LoanRequest['status']; color: string }[] = [
   { label: 'Pendiente', value: 'pending', color: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30' },
@@ -51,7 +53,9 @@ export default function LoanDetailPage() {
   const [loan, setLoan] = useState<LoanRequest | null>(null);
   const [loading, setLoading] = useState(true);
   const [showDocs, setShowDocs] = useState(false);
+  const [showReminder, setShowReminder] = useState(false);
   const [updating, setUpdating] = useState(false);
+  const [clientInfo, setClientInfo] = useState<{ name: string; email?: string } | null>(null);
 
   useEffect(() => {
     const fetchLoan = async () => {
@@ -61,7 +65,20 @@ export default function LoanDetailPage() {
           router.replace('/');
           return;
         }
-        setLoan(parseLoanFromFirestore(loanDoc.id, loanDoc.data() as Record<string, unknown>));
+        const parsed = parseLoanFromFirestore(loanDoc.id, loanDoc.data() as Record<string, unknown>);
+        setLoan(parsed);
+        // Fetch client info by phone
+        if (parsed.phone) {
+          const q = query(collection(db, 'users'), where('phone', '==', parsed.phone));
+          const snap = await getDocs(q);
+          if (!snap.empty) {
+            const u = snap.docs[0].data() as Record<string, unknown>;
+            setClientInfo({
+              name: [(u.name as string) || '', (u.lastName as string) || ''].filter(Boolean).join(' '),
+              email: (u.email as string) || undefined,
+            });
+          }
+        }
       } catch (e) {
         console.error(e);
       } finally {
@@ -107,14 +124,34 @@ export default function LoanDetailPage() {
   });
 
   const bank = loan.loanInformation.bankInformation;
+  const mora = isInMora(loan);
+  const daysOverdue = getDaysOverdue(loan);
 
   return (
     <div className="max-w-2xl">
-      <div className="flex items-center gap-3 mb-6">
+      <div className="flex items-center justify-between mb-6">
         <Link href="/" className="text-gray-400 hover:text-[#2FFF00] transition-colors">
           ← Solicitudes
         </Link>
+        {mora && (
+          <button
+            onClick={() => setShowReminder(true)}
+            className="flex items-center gap-2 bg-orange-500/20 border border-orange-500/40 text-orange-300 px-4 py-2 rounded-xl text-sm font-medium hover:bg-orange-500/30 transition-colors"
+          >
+            <span>📩</span> Enviar recordatorio
+          </button>
+        )}
       </div>
+
+      {/* Mora banner */}
+      {mora && (
+        <div className="bg-orange-500/10 border border-orange-500/30 rounded-xl px-4 py-3 mb-4 flex items-center justify-between">
+          <div>
+            <p className="text-orange-400 font-semibold text-sm">⚠ Préstamo en mora</p>
+            <p className="text-orange-300/70 text-xs mt-0.5">{daysOverdue} días de atraso · {loan.installmentsPaid} de {loan.installments} cuotas pagadas</p>
+          </div>
+        </div>
+      )}
 
       {/* Main info */}
       <div className="bg-[#0d1f0d] border border-[#2FFF00]/20 rounded-2xl p-6 mb-4">
@@ -224,6 +261,16 @@ export default function LoanDetailPage() {
         <LoanDocumentsDialog
           loanInfo={loan.loanInformation}
           onClose={() => setShowDocs(false)}
+        />
+      )}
+
+      {showReminder && (
+        <ReminderDialog
+          phone={loan.phone}
+          email={clientInfo?.email}
+          userName={clientInfo?.name || loan.phone}
+          daysOverdue={daysOverdue}
+          onClose={() => setShowReminder(false)}
         />
       )}
     </div>
