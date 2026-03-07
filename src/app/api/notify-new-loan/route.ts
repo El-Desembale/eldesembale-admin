@@ -6,11 +6,12 @@ interface NewLoanPayload {
   phone: string;
   installments: number;
   paymentPeriod: string;
+  clientName?: string;
 }
 
 export async function POST(req: NextRequest) {
   const body: NewLoanPayload = await req.json();
-  const { loanId, amount, phone, installments, paymentPeriod } = body;
+  const { loanId, amount, phone, installments, paymentPeriod, clientName } = body;
 
   const sid = process.env.TWILIO_ACCOUNT_SID;
   const token = process.env.TWILIO_AUTH_TOKEN;
@@ -31,9 +32,10 @@ export async function POST(req: NextRequest) {
     maximumFractionDigits: 0,
   }).format(amount);
 
+  const clientDisplay = clientName ? `${clientName} (${phone})` : phone;
   const message =
     `🆕 *Nueva solicitud de préstamo*\n\n` +
-    `📱 Cliente: ${phone}\n` +
+    `👤 Cliente: ${clientDisplay}\n` +
     `💰 Monto: ${amountFormatted}\n` +
     `📅 ${installments} cuotas · ${paymentPeriod}\n\n` +
     `Ver solicitud:\nhttps://eldesembale-admin.vercel.app/solicitudes/${loanId}`;
