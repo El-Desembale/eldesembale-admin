@@ -267,7 +267,6 @@ export default function LoanDetailPage() {
       {showReminder && (
         <ReminderDialog
           phone={loan.phone}
-          email={clientInfo?.email}
           userName={clientInfo?.name || loan.phone}
           daysOverdue={daysOverdue}
           onClose={() => setShowReminder(false)}
