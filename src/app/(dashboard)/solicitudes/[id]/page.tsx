@@ -1,0 +1,231 @@
+'use client';
+
+import { useState, useEffect } from 'react';
+import { useParams, useRouter } from 'next/navigation';
+import Link from 'next/link';
+import { doc, getDoc, Timestamp } from 'firebase/firestore';
+import { db } from '@/lib/firebase';
+import { updateLoanStatus } from '@/lib/firestore';
+import { LoanRequest } from '@/lib/types';
+import { StatusBadge } from '@/components/StatusBadge';
+import { LoanDocumentsDialog } from '@/components/LoanDocumentsDialog';
+
+const ACTION_STATUSES: { label: string; value: LoanRequest['status']; color: string }[] = [
+  { label: 'Pendiente', value: 'pending', color: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30' },
+  { label: 'En proceso', value: 'in_process', color: 'bg-blue-500/20 text-blue-400 border-blue-500/30' },
+  { label: 'En desembolso', value: 'in_disbursement_process', color: 'bg-purple-500/20 text-purple-400 border-purple-500/30' },
+  { label: 'Aprobar', value: 'approved', color: 'bg-[#2FFF00]/20 text-[#2FFF00] border-[#2FFF00]/30' },
+  { label: 'Rechazar', value: 'rejected', color: 'bg-red-500/20 text-red-400 border-red-500/30' },
+];
+
+function parseLoanFromFirestore(id: string, data: Record<string, unknown>): LoanRequest {
+  const createdAt = data.created_at instanceof Timestamp ? data.created_at.toDate() : new Date();
+  const raw = (data.loan_information as Record<string, unknown>) || {};
+  return {
+    id,
+    amount: (data.amount as number) || 0,
+    createdAt,
+    installments: (data.installments as number) || 0,
+    interest: (data.interest as number) || 0,
+    paymentPeriod: (data.payment_period as string) || '',
+    status: (data.status as LoanRequest['status']) || 'pending',
+    installmentsPaid: (data.installments_paid as number) || 0,
+    phone: (data.phone as string) || '',
+    isSubscribed: (data.isSubscribed as boolean) || false,
+    loanInformation: {
+      firstReference: (raw.first_reference as { phone: string; relationship: string }) || { phone: '', relationship: '' },
+      secondReference: (raw.second_reference as { phone: string; relationship: string }) || { phone: '', relationship: '' },
+      ccBackPicture: (raw.cc_back_picture as string) || '',
+      selfiePicture: (raw.selfie_picture as string) || '',
+      empInvoiceFile: (raw.emp_invoice_file as string) || '',
+      ccFrontalPicture: (raw.cc_frontal_picture as string) || '',
+      bankInformation: (raw.bank_information as Record<string, string>) || {},
+      direction: (raw.direction as string) || '',
+    },
+  };
+}
+
+export default function LoanDetailPage() {
+  const { id } = useParams<{ id: string }>();
+  const router = useRouter();
+  const [loan, setLoan] = useState<LoanRequest | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [showDocs, setShowDocs] = useState(false);
+  const [updating, setUpdating] = useState(false);
+
+  useEffect(() => {
+    const fetchLoan = async () => {
+      try {
+        const loanDoc = await getDoc(doc(db, 'loan_request', id));
+        if (!loanDoc.exists()) {
+          router.replace('/');
+          return;
+        }
+        setLoan(parseLoanFromFirestore(loanDoc.id, loanDoc.data() as Record<string, unknown>));
+      } catch (e) {
+        console.error(e);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchLoan();
+  }, [id, router]);
+
+  const handleStatusChange = async (status: LoanRequest['status']) => {
+    if (!loan || updating) return;
+    setUpdating(true);
+    try {
+      await updateLoanStatus(loan.id, status);
+      setLoan(prev => prev ? { ...prev, status } : prev);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setUpdating(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex justify-center py-16">
+        <div className="w-8 h-8 border-2 border-[#2FFF00] border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  if (!loan) return null;
+
+  const amount = new Intl.NumberFormat('es-CO', {
+    style: 'currency',
+    currency: 'COP',
+    maximumFractionDigits: 0,
+  }).format(loan.amount);
+
+  const date = loan.createdAt.toLocaleDateString('es-CO', {
+    day: '2-digit',
+    month: 'long',
+    year: 'numeric',
+  });
+
+  const bank = loan.loanInformation.bankInformation;
+
+  return (
+    <div className="max-w-2xl">
+      <div className="flex items-center gap-3 mb-6">
+        <Link href="/" className="text-gray-400 hover:text-[#2FFF00] transition-colors">
+          ← Solicitudes
+        </Link>
+      </div>
+
+      {/* Main info */}
+      <div className="bg-[#0d1f0d] border border-[#2FFF00]/20 rounded-2xl p-6 mb-4">
+        <div className="flex justify-between items-start mb-4">
+          <div>
+            <p className="text-[#2FFF00] text-3xl font-bold">{amount}</p>
+            <p className="text-gray-400 text-sm mt-1">{loan.phone}</p>
+          </div>
+          <StatusBadge status={loan.status} />
+        </div>
+
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-sm">
+          <div>
+            <p className="text-gray-500 text-xs">Cuotas</p>
+            <p className="text-white">{loan.installments}</p>
+          </div>
+          <div>
+            <p className="text-gray-500 text-xs">Cuotas pagadas</p>
+            <p className="text-white">{loan.installmentsPaid}</p>
+          </div>
+          <div>
+            <p className="text-gray-500 text-xs">Interés</p>
+            <p className="text-white">{loan.interest}%</p>
+          </div>
+          <div>
+            <p className="text-gray-500 text-xs">Período</p>
+            <p className="text-white">{loan.paymentPeriod}</p>
+          </div>
+          <div>
+            <p className="text-gray-500 text-xs">Fecha</p>
+            <p className="text-white">{date}</p>
+          </div>
+          <div>
+            <p className="text-gray-500 text-xs">Suscrito</p>
+            <p className="text-white">{loan.isSubscribed ? 'Sí' : 'No'}</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Bank info */}
+      {Object.keys(bank).length > 0 && (
+        <div className="bg-[#0d1f0d] border border-[#2FFF00]/20 rounded-2xl p-5 mb-4">
+          <h2 className="text-white font-semibold mb-3">Información bancaria</h2>
+          <div className="grid grid-cols-2 gap-2 text-sm">
+            {Object.entries(bank).map(([key, val]) => (
+              <div key={key}>
+                <p className="text-gray-500 text-xs capitalize">{key.replace(/_/g, ' ')}</p>
+                <p className="text-white">{val}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* References */}
+      <div className="bg-[#0d1f0d] border border-[#2FFF00]/20 rounded-2xl p-5 mb-4">
+        <h2 className="text-white font-semibold mb-3">Referencias</h2>
+        <div className="grid sm:grid-cols-2 gap-4 text-sm">
+          <div>
+            <p className="text-gray-500 text-xs mb-1">Referencia 1</p>
+            <p className="text-white">{loan.loanInformation.firstReference.phone || '—'}</p>
+            <p className="text-gray-400">{loan.loanInformation.firstReference.relationship || '—'}</p>
+          </div>
+          <div>
+            <p className="text-gray-500 text-xs mb-1">Referencia 2</p>
+            <p className="text-white">{loan.loanInformation.secondReference.phone || '—'}</p>
+            <p className="text-gray-400">{loan.loanInformation.secondReference.relationship || '—'}</p>
+          </div>
+        </div>
+        {loan.loanInformation.direction && (
+          <div className="mt-3">
+            <p className="text-gray-500 text-xs">Dirección</p>
+            <p className="text-white text-sm">{loan.loanInformation.direction}</p>
+          </div>
+        )}
+      </div>
+
+      {/* Documents */}
+      <button
+        onClick={() => setShowDocs(true)}
+        className="w-full bg-[#0d1f0d] border border-[#2FFF00]/20 rounded-2xl p-4 text-left hover:border-[#2FFF00]/60 transition-colors mb-4 flex justify-between items-center"
+      >
+        <span className="text-white font-semibold">Ver documentos</span>
+        <span className="text-[#2FFF00]">→</span>
+      </button>
+
+      {/* Status actions */}
+      <div className="bg-[#0d1f0d] border border-[#2FFF00]/20 rounded-2xl p-5">
+        <h2 className="text-white font-semibold mb-3">Cambiar estado</h2>
+        <div className="flex flex-wrap gap-2">
+          {ACTION_STATUSES.map(action => (
+            <button
+              key={action.value}
+              onClick={() => handleStatusChange(action.value)}
+              disabled={updating || loan.status === action.value}
+              className={`px-3 py-1.5 rounded-full text-sm font-medium border transition-all disabled:opacity-40 ${action.color} ${
+                loan.status === action.value ? 'opacity-100 ring-2 ring-white/20' : 'hover:opacity-80'
+              }`}
+            >
+              {loan.status === action.value && '✓ '}{action.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {showDocs && (
+        <LoanDocumentsDialog
+          loanInfo={loan.loanInformation}
+          onClose={() => setShowDocs(false)}
+        />
+      )}
+    </div>
+  );
+}
