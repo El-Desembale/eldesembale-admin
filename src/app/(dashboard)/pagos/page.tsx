@@ -5,7 +5,7 @@ import { usePayments } from '@/hooks/usePayments';
 import { useLoans } from '@/hooks/useLoans';
 import { useUsers } from '@/hooks/useUsers';
 import { PaymentStatusBadge } from '@/components/PaymentStatusBadge';
-import { Payment, PAYMENT_STATUS_LABELS, LoanRequest } from '@/lib/types';
+import { Payment, LoanRequest } from '@/lib/types';
 import { isInMora, getDaysOverdue } from '@/lib/mora';
 import Link from 'next/link';
 
@@ -39,22 +39,42 @@ export default function PagosPage() {
   const totalApproved = useMemo(() =>
     payments.filter(p => p.status === 'APPROVED').reduce((sum, p) => sum + p.amount, 0),
   [payments]);
-  const subscriptionRevenue = useMemo(() =>
-    payments.filter(p => p.type === 'subscription' && p.status === 'APPROVED').reduce((sum, p) => sum + p.amount, 0),
-  [payments]);
+  const subscribedCount = users.filter(u => u.isSubscribed).length;
+  const subscriptionRevenue = subscribedCount * 22000;
   const installmentRevenue = useMemo(() =>
     payments.filter(p => p.type === 'installment' && p.status === 'APPROVED').reduce((sum, p) => sum + p.amount, 0),
   [payments]);
 
-  // Subscription payments
-  const subscriptionPayments = useMemo(() => {
-    const subs = payments.filter(p => p.type === 'subscription');
-    if (!search) return subs;
+  // Subscribed users with payment info
+  const subscribedUsers = useMemo(() => {
+    const subPaymentsByPhone: Record<string, Payment> = {};
+    for (const p of payments) {
+      if (p.type === 'subscription' && p.status === 'APPROVED') {
+        if (!subPaymentsByPhone[p.userPhone] || p.createdAt > subPaymentsByPhone[p.userPhone].createdAt) {
+          subPaymentsByPhone[p.userPhone] = p;
+        }
+      }
+    }
+
+    const items = users
+      .filter(u => u.isSubscribed)
+      .map(u => {
+        const payment = u.phone ? subPaymentsByPhone[u.phone] : undefined;
+        return {
+          user: u,
+          name: [u.name, u.lastName].filter(Boolean).join(' ') || u.phone,
+          amount: payment?.amount || 22000,
+          date: payment?.createdAt || null,
+          hasPaymentRecord: !!payment,
+        };
+      });
+
+    if (!search) return items;
     const q = search.toLowerCase();
-    return subs.filter(p =>
-      p.userPhone.includes(q) || p.userName.toLowerCase().includes(q) || p.userEmail.toLowerCase().includes(q),
+    return items.filter(item =>
+      item.name.toLowerCase().includes(q) || item.user.phone.includes(q) || item.user.email.toLowerCase().includes(q),
     );
-  }, [payments, search]);
+  }, [users, payments, search]);
 
   // Loans with payment data
   const loanTracking = useMemo(() => {
@@ -124,7 +144,7 @@ export default function PagosPage() {
           <p className="text-[#2FFF00] font-bold text-lg">{formatCOP(totalApproved)}</p>
         </div>
         <div className="bg-[#0d1f0d] border border-[#2FFF00]/20 rounded-xl p-4">
-          <p className="text-gray-500 text-xs">Suscripciones</p>
+          <p className="text-gray-500 text-xs">Suscritos ({subscribedCount})</p>
           <p className="text-white font-bold text-lg">{formatCOP(subscriptionRevenue)}</p>
         </div>
         <div className="bg-[#0d1f0d] border border-[#2FFF00]/20 rounded-xl p-4">
@@ -175,7 +195,7 @@ export default function PagosPage() {
       ) : tab === 'loans' ? (
         <LoansTrackingView items={loanTracking} />
       ) : (
-        <SubscriptionsView payments={subscriptionPayments} />
+        <SubscriptionsView items={subscribedUsers} />
       )}
     </div>
   );
@@ -315,35 +335,43 @@ function LoansTrackingView({ items }: { items: LoanTrackingItem[] }) {
 
 // ─── Suscripciones ───
 
-function SubscriptionsView({ payments }: { payments: Payment[] }) {
-  if (payments.length === 0) {
-    return <p className="text-gray-500 text-center py-8">No hay suscripciones</p>;
+interface SubscribedItem {
+  user: { id: string; name: string; lastName: string; phone: string; email: string };
+  name: string;
+  amount: number;
+  date: Date | null;
+  hasPaymentRecord: boolean;
+}
+
+function SubscriptionsView({ items }: { items: SubscribedItem[] }) {
+  if (items.length === 0) {
+    return <p className="text-gray-500 text-center py-8">No hay usuarios suscritos</p>;
   }
 
   return (
     <div className="flex flex-col gap-2">
-      {payments.map(payment => (
-        <div
-          key={payment.id}
-          className="bg-[#0d1f0d] border border-[#2FFF00]/20 rounded-xl p-4 flex items-center justify-between"
-        >
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-[#2FFF00]/15 flex items-center justify-center text-[#2FFF00] font-bold text-sm">
-              {(payment.userName?.[0] || payment.userPhone?.[0] || '?').toUpperCase()}
+      {items.map(item => (
+        <Link key={item.user.id} href={`/usuarios/${item.user.id}`}>
+          <div className="bg-[#0d1f0d] border border-[#2FFF00]/20 rounded-xl p-4 flex items-center justify-between hover:border-[#2FFF00]/60 transition-all">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-[#2FFF00]/15 flex items-center justify-center text-[#2FFF00] font-bold text-sm">
+                {(item.name?.[0] || '?').toUpperCase()}
+              </div>
+              <div>
+                <p className="text-white font-medium">{item.name}</p>
+                <p className="text-gray-500 text-xs">{item.user.phone} · {item.user.email}</p>
+              </div>
             </div>
-            <div>
-              <p className="text-white font-medium">{payment.userName || payment.userPhone}</p>
-              <p className="text-gray-500 text-xs">{payment.userPhone} · {payment.userEmail}</p>
-            </div>
-          </div>
-          <div className="flex items-center gap-4">
             <div className="text-right">
-              <p className="text-white font-semibold">{formatCOP(payment.amount)}</p>
-              <p className="text-gray-600 text-xs">{formatDate(payment.createdAt)}</p>
+              <p className="text-[#2FFF00] font-semibold">{formatCOP(item.amount)}</p>
+              {item.date ? (
+                <p className="text-gray-600 text-xs">{formatDate(item.date)}</p>
+              ) : (
+                <p className="text-gray-600 text-xs">Sin registro de pago</p>
+              )}
             </div>
-            <PaymentStatusBadge status={payment.status} />
           </div>
-        </div>
+        </Link>
       ))}
     </div>
   );

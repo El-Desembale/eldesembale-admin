@@ -28,9 +28,9 @@ export function UserCard({ user, subscriptionAmount }: Props) {
               <span className="text-xs bg-[#2FFF00]/20 text-[#2FFF00] px-2 py-1 rounded-full">
                 Suscrito
               </span>
-              {subscriptionAmount != null && subscriptionAmount > 0 && (
-                <p className="text-[#2FFF00] text-xs mt-1 font-medium">{formatCOP(subscriptionAmount)}</p>
-              )}
+              <p className="text-[#2FFF00] text-xs mt-1 font-medium">
+                {formatCOP(subscriptionAmount && subscriptionAmount > 0 ? subscriptionAmount : 22000)}
+              </p>
             </div>
           ) : (
             <span className="text-xs bg-white/5 text-gray-500 px-2 py-1 rounded-full">
