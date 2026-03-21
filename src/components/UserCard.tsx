@@ -3,9 +3,13 @@ import { User } from '@/lib/types';
 
 interface Props {
   user: User;
+  subscriptionAmount?: number;
 }
 
-export function UserCard({ user }: Props) {
+const formatCOP = (amount: number) =>
+  new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 }).format(amount);
+
+export function UserCard({ user, subscriptionAmount }: Props) {
   return (
     <Link href={`/usuarios/${user.id}`}>
       <div className="bg-[#0d1f0d] border border-[#2FFF00]/20 rounded-xl p-4 hover:border-[#2FFF00]/60 transition-all cursor-pointer">
@@ -19,9 +23,18 @@ export function UserCard({ user }: Props) {
             </p>
             <p className="text-gray-400 text-sm truncate">{user.email || user.phone}</p>
           </div>
-          {user.isSubscribed && (
-            <span className="text-xs bg-[#2FFF00]/20 text-[#2FFF00] px-2 py-1 rounded-full">
-              Suscrito
+          {user.isSubscribed ? (
+            <div className="text-right">
+              <span className="text-xs bg-[#2FFF00]/20 text-[#2FFF00] px-2 py-1 rounded-full">
+                Suscrito
+              </span>
+              {subscriptionAmount != null && subscriptionAmount > 0 && (
+                <p className="text-[#2FFF00] text-xs mt-1 font-medium">{formatCOP(subscriptionAmount)}</p>
+              )}
+            </div>
+          ) : (
+            <span className="text-xs bg-white/5 text-gray-500 px-2 py-1 rounded-full">
+              No suscrito
             </span>
           )}
         </div>
