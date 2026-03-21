@@ -77,6 +77,18 @@ export async function getUsers(): Promise<User[]> {
   });
 }
 
+export async function getUserPassword(userId: string): Promise<string | null> {
+  const { getDoc } = await import('firebase/firestore');
+  const snap = await getDoc(doc(db, 'users', userId));
+  if (!snap.exists()) return null;
+  const data = snap.data() as Record<string, unknown>;
+  return (data.password as string) || null;
+}
+
+export async function updateUserPassword(userId: string, newPassword: string): Promise<void> {
+  await updateDoc(doc(db, 'users', userId), { password: newPassword });
+}
+
 // Payments
 
 function parsePayment(docId: string, data: Record<string, unknown>): Payment {
