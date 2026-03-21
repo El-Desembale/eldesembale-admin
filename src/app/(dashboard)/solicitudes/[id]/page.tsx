@@ -5,7 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { doc, getDoc, query, collection, where, getDocs, Timestamp } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-import { updateLoanStatus, getPaymentsByLoanId } from '@/lib/firestore';
+import { updateLoanStatus, getPaymentsByLoanId, getBudgetConfig, getLoans } from '@/lib/firestore';
 import { LoanRequest, Payment } from '@/lib/types';
 import { isInMora, getDaysOverdue } from '@/lib/mora';
 import { StatusBadge } from '@/components/StatusBadge';
@@ -58,6 +58,7 @@ export default function LoanDetailPage() {
   const [updating, setUpdating] = useState(false);
   const [clientInfo, setClientInfo] = useState<{ name: string; email?: string } | null>(null);
   const [payments, setPayments] = useState<Payment[]>([]);
+  const [availableFunds, setAvailableFunds] = useState<number | null>(null);
 
   useEffect(() => {
     const fetchLoan = async () => {
@@ -83,6 +84,17 @@ export default function LoanDetailPage() {
               email: (u.email as string) || undefined,
             });
           }
+        }
+        // Calculate available funds for budget check
+        const [budgetConfig, allLoans] = await Promise.all([getBudgetConfig(), getLoans()]);
+        if (budgetConfig && budgetConfig.totalCapital > 0) {
+          const approvedLoans = allLoans.filter(l => l.status === 'approved');
+          const capitalLent = approvedLoans.reduce((sum, l) => sum + l.amount, 0);
+          const capitalRecovered = approvedLoans.reduce((sum, l) => {
+            if (l.installments <= 0) return sum;
+            return sum + (l.installmentsPaid * (l.amount / l.installments));
+          }, 0);
+          setAvailableFunds(budgetConfig.totalCapital - capitalLent + capitalRecovered);
         }
       } catch (e) {
         console.error(e);
@@ -260,22 +272,36 @@ export default function LoanDetailPage() {
         )}
       </div>
 
+      {/* Insufficient funds warning */}
+      {availableFunds !== null && availableFunds < loan.amount && loan.status !== 'approved' && (
+        <div className="bg-red-500/10 border border-red-500/30 rounded-xl px-4 py-3 mb-4">
+          <p className="text-red-400 font-semibold text-sm">Fondos insuficientes</p>
+          <p className="text-red-300/70 text-xs mt-0.5">
+            Disponible: {new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 }).format(availableFunds)} — Este préstamo requiere: {amount}
+          </p>
+        </div>
+      )}
+
       {/* Status actions */}
       <div className="bg-[#0d1f0d] border border-[#2FFF00]/20 rounded-2xl p-5">
         <h2 className="text-white font-semibold mb-3">Cambiar estado</h2>
         <div className="flex flex-wrap gap-2">
-          {ACTION_STATUSES.map(action => (
-            <button
-              key={action.value}
-              onClick={() => handleStatusChange(action.value)}
-              disabled={updating || loan.status === action.value}
-              className={`px-3 py-1.5 rounded-full text-sm font-medium border transition-all disabled:opacity-40 ${action.color} ${
-                loan.status === action.value ? 'opacity-100 ring-2 ring-white/20' : 'hover:opacity-80'
-              }`}
-            >
-              {loan.status === action.value && '✓ '}{action.label}
-            </button>
-          ))}
+          {ACTION_STATUSES.map(action => {
+            const insufficientFunds = action.value === 'approved' && availableFunds !== null && availableFunds < loan.amount;
+            return (
+              <button
+                key={action.value}
+                onClick={() => handleStatusChange(action.value)}
+                disabled={updating || loan.status === action.value || insufficientFunds}
+                title={insufficientFunds ? 'Fondos insuficientes para aprobar este préstamo' : undefined}
+                className={`px-3 py-1.5 rounded-full text-sm font-medium border transition-all disabled:opacity-40 ${action.color} ${
+                  loan.status === action.value ? 'opacity-100 ring-2 ring-white/20' : 'hover:opacity-80'
+                }`}
+              >
+                {loan.status === action.value && '✓ '}{action.label}
+              </button>
+            );
+          })}
         </div>
       </div>
 

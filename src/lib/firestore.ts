@@ -131,6 +131,24 @@ export async function getPaymentsByLoanId(loanId: string): Promise<Payment[]> {
   return snapshot.docs.map(d => parsePayment(d.id, d.data() as Record<string, unknown>));
 }
 
+// Budget
+
+export async function getBudgetConfig(): Promise<{ totalCapital: number } | null> {
+  const { getDoc } = await import('firebase/firestore');
+  const snap = await getDoc(doc(db, 'settings', 'budget'));
+  if (!snap.exists()) return null;
+  const data = snap.data() as Record<string, unknown>;
+  return { totalCapital: (data.total_capital as number) || 0 };
+}
+
+export async function setBudgetConfig(totalCapital: number): Promise<void> {
+  const { setDoc } = await import('firebase/firestore');
+  await setDoc(doc(db, 'settings', 'budget'), {
+    total_capital: totalCapital,
+    updated_at: new Date(),
+  });
+}
+
 export async function saveFcmToken(uid: string, token: string): Promise<void> {
   await updateDoc(doc(db, 'admins', uid), { fcmToken: token, updatedAt: new Date() })
     .catch(async () => {

@@ -1,12 +1,13 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect, useCallback } from 'react';
 import { usePayments } from '@/hooks/usePayments';
 import { useLoans } from '@/hooks/useLoans';
 import { useUsers } from '@/hooks/useUsers';
 import { PaymentStatusBadge } from '@/components/PaymentStatusBadge';
 import { Payment, LoanRequest } from '@/lib/types';
 import { isInMora, getDaysOverdue } from '@/lib/mora';
+import { getBudgetConfig, setBudgetConfig } from '@/lib/firestore';
 import Link from 'next/link';
 
 type Tab = 'overview' | 'loans' | 'subscriptions';
@@ -23,8 +24,22 @@ export default function PagosPage() {
   const { users } = useUsers();
   const [tab, setTab] = useState<Tab>('overview');
   const [search, setSearch] = useState('');
+  const [totalCapital, setTotalCapital] = useState<number>(0);
+  const [loadingBudget, setLoadingBudget] = useState(true);
 
-  const loading = loadingPayments || loadingLoans;
+  useEffect(() => {
+    getBudgetConfig().then(config => {
+      if (config) setTotalCapital(config.totalCapital);
+      setLoadingBudget(false);
+    });
+  }, []);
+
+  const handleSaveBudget = useCallback(async (value: number) => {
+    setTotalCapital(value);
+    await setBudgetConfig(value);
+  }, []);
+
+  const loading = loadingPayments || loadingLoans || loadingBudget;
 
   // User lookup by phone
   const usersByPhone = useMemo(() => {
@@ -217,7 +232,7 @@ export default function PagosPage() {
       ) : error ? (
         <p className="text-red-400 text-center py-8">{error}</p>
       ) : tab === 'overview' ? (
-        <FinancialOverview finance={finance} />
+        <FinancialOverview finance={finance} totalCapital={totalCapital} onSaveBudget={handleSaveBudget} />
       ) : tab === 'loans' ? (
         <>
           <input
@@ -265,13 +280,78 @@ interface FinanceData {
   completedLoans: number;
 }
 
-function FinancialOverview({ finance }: { finance: FinanceData }) {
+function FinancialOverview({ finance, totalCapital, onSaveBudget }: { finance: FinanceData; totalCapital: number; onSaveBudget: (v: number) => Promise<void> }) {
+  const [editingBudget, setEditingBudget] = useState(false);
+  const [budgetInput, setBudgetInput] = useState('');
+  const [savingBudget, setSavingBudget] = useState(false);
+
+  const availableFunds = totalCapital - finance.capitalLent + finance.capitalRecovered;
+
+  const handleBudgetSave = async () => {
+    const val = parseInt(budgetInput.replace(/\D/g, ''), 10);
+    if (!val || val <= 0) return;
+    setSavingBudget(true);
+    await onSaveBudget(val);
+    setEditingBudget(false);
+    setSavingBudget(false);
+  };
+
   const collectProgress = finance.totalToCollect > 0
     ? (finance.installmentCollected / finance.totalToCollect) * 100 : 0;
 
   return (
     <div className="flex flex-col gap-6">
-      {/* Ganancia neta - destacada */}
+      {/* Presupuesto disponible */}
+      <div className={`border rounded-2xl p-6 ${availableFunds <= 0 && totalCapital > 0 ? 'bg-red-500/5 border-red-500/30' : 'bg-gradient-to-r from-[#0d1f0d] to-[#0d2a0d] border-[#2FFF00]/30'}`}>
+        <div className="flex items-start justify-between">
+          <div>
+            <p className="text-gray-400 text-sm mb-1">Fondos disponibles para prestar</p>
+            <p className={`font-bold text-4xl ${availableFunds <= 0 && totalCapital > 0 ? 'text-red-400' : 'text-[#2FFF00]'}`}>
+              {totalCapital > 0 ? formatCOP(availableFunds) : 'Sin configurar'}
+            </p>
+            <p className="text-gray-500 text-xs mt-2">
+              Capital total: {formatCOP(totalCapital)} − Prestado: {formatCOP(finance.capitalLent)} + Recuperado: {formatCOP(finance.capitalRecovered)}
+            </p>
+          </div>
+          {!editingBudget && (
+            <button
+              onClick={() => { setEditingBudget(true); setBudgetInput(totalCapital > 0 ? String(totalCapital) : ''); }}
+              className="text-[#2FFF00] text-sm hover:underline whitespace-nowrap"
+            >
+              {totalCapital > 0 ? 'Editar capital' : 'Configurar'}
+            </button>
+          )}
+        </div>
+        {editingBudget && (
+          <div className="mt-4 pt-4 border-t border-white/10">
+            <p className="text-gray-500 text-xs mb-2">Capital total disponible para préstamos</p>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={budgetInput}
+                onChange={e => setBudgetInput(e.target.value.replace(/[^0-9]/g, ''))}
+                placeholder="Ej: 5000000"
+                className="flex-1 bg-[#061006] border border-[#2FFF00]/20 rounded-lg px-3 py-2 text-white text-sm placeholder-gray-600 focus:outline-none focus:border-[#2FFF00]/60"
+              />
+              <button
+                onClick={handleBudgetSave}
+                disabled={savingBudget}
+                className="bg-[#2FFF00] text-black px-4 py-2 rounded-lg text-sm font-medium hover:bg-[#2FFF00]/90 disabled:opacity-50"
+              >
+                {savingBudget ? '...' : 'Guardar'}
+              </button>
+              <button
+                onClick={() => setEditingBudget(false)}
+                className="text-gray-400 px-3 py-2 text-sm hover:text-white"
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Ganancia neta */}
       <div className="bg-gradient-to-r from-[#0d1f0d] to-[#0d2a0d] border border-[#2FFF00]/30 rounded-2xl p-6">
         <p className="text-gray-400 text-sm mb-1">Ganancia neta</p>
         <p className="text-[#2FFF00] font-bold text-4xl">{formatCOP(finance.netProfit)}</p>
