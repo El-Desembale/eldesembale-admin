@@ -3,7 +3,7 @@
 import { useState } from 'react';
 
 interface Props {
-  phone: string;
+  email: string;
   userName: string;
   daysOverdue: number;
   onClose: () => void;
@@ -12,7 +12,7 @@ interface Props {
 const DEFAULT_MESSAGE = (name: string, days: number) =>
   `Hola ${name}, te recordamos que tienes ${days} día${days !== 1 ? 's' : ''} de mora en tu préstamo con El Desembale. Por favor comunícate con nosotros para ponerte al día y evitar cargos adicionales. ¡Gracias!`;
 
-export function ReminderDialog({ phone, userName, daysOverdue, onClose }: Props) {
+export function ReminderDialog({ email, userName, daysOverdue, onClose }: Props) {
   const [message, setMessage] = useState(DEFAULT_MESSAGE(userName || 'cliente', daysOverdue));
   const [sending, setSending] = useState(false);
   const [result, setResult] = useState<{ success: boolean; error?: string } | null>(null);
@@ -24,7 +24,7 @@ export function ReminderDialog({ phone, userName, daysOverdue, onClose }: Props)
       const res = await fetch('/api/send-reminder', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone, userName, message }),
+        body: JSON.stringify({ email, userName, message }),
       });
       const data = await res.json();
       setResult(data);
@@ -41,8 +41,8 @@ export function ReminderDialog({ phone, userName, daysOverdue, onClose }: Props)
         {/* Header */}
         <div className="flex justify-between items-center">
           <div className="flex items-center gap-2">
-            <span className="text-2xl">💬</span>
-            <h2 className="text-white font-bold text-lg">Recordatorio por WhatsApp</h2>
+            <span className="text-2xl">✉️</span>
+            <h2 className="text-white font-bold text-lg">Recordatorio por correo</h2>
           </div>
           <button onClick={onClose} className="text-gray-400 hover:text-white text-2xl leading-none">×</button>
         </div>
@@ -50,8 +50,8 @@ export function ReminderDialog({ phone, userName, daysOverdue, onClose }: Props)
         {/* Client info */}
         <div className="bg-[#061006] rounded-xl p-4 text-sm space-y-1">
           <p className="text-gray-400">Cliente: <span className="text-white font-medium">{userName || '—'}</span></p>
-          <p className="text-gray-400">WhatsApp: <span className="text-white">{phone}</span></p>
-          <p className="text-orange-400 font-medium">⚠ {daysOverdue} días en mora</p>
+          <p className="text-gray-400">Correo: <span className="text-white">{email || 'No registrado'}</span></p>
+          <p className="text-orange-400 font-medium">{daysOverdue} días en mora</p>
         </div>
 
         {/* Message */}
@@ -72,8 +72,8 @@ export function ReminderDialog({ phone, userName, daysOverdue, onClose }: Props)
             result.success ? 'bg-green-900/30 text-green-400' : 'bg-red-900/30 text-red-400'
           }`}>
             {result.success
-              ? '✓ Mensaje enviado por WhatsApp correctamente'
-              : `✗ ${result.error}`}
+              ? 'Correo enviado correctamente'
+              : `Error: ${result.error}`}
           </div>
         )}
 
@@ -88,10 +88,10 @@ export function ReminderDialog({ phone, userName, daysOverdue, onClose }: Props)
           {!result?.success && (
             <button
               onClick={handleSend}
-              disabled={sending || !message.trim()}
-              className="flex-1 py-2.5 rounded-xl text-sm font-medium bg-[#25D366] text-white hover:bg-[#20bd5a] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              disabled={sending || !message.trim() || !email}
+              className="flex-1 py-2.5 rounded-xl text-sm font-medium bg-orange-500 text-white hover:bg-orange-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {sending ? 'Enviando...' : '📩 Enviar WhatsApp'}
+              {sending ? 'Enviando...' : 'Enviar correo'}
             </button>
           )}
         </div>
