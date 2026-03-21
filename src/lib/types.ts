@@ -58,3 +58,40 @@ export const STATUS_COLORS: Record<LoanStatus, string> = {
   approved: '#2FFF00',
   rejected: '#f87171',
 };
+
+// Payment types
+export type PaymentType = 'subscription' | 'installment';
+export type PaymentStatus = 'APPROVED' | 'DECLINED' | 'ERROR';
+
+export interface Payment {
+  id: string;
+  reference: string;
+  type: PaymentType;
+  status: PaymentStatus;
+  amount: number;
+  amountInCents: number;
+  currency: string;
+  userPhone: string;
+  userEmail: string;
+  userName: string;
+  loanId: string | null;
+  installmentNumber: number | null;
+  createdAt: Date;
+}
+
+export const PAYMENT_STATUS_LABELS: Record<PaymentStatus, string> = {
+  APPROVED: 'Aprobado',
+  DECLINED: 'Rechazado',
+  ERROR: 'Error',
+};
+
+export const PAYMENT_STATUS_COLORS: Record<PaymentStatus, string> = {
+  APPROVED: '#2FFF00',
+  DECLINED: '#f87171',
+  ERROR: '#f59e0b',
+};
+
+export const PAYMENT_TYPE_LABELS: Record<PaymentType, string> = {
+  subscription: 'Suscripción',
+  installment: 'Cuota',
+};

@@ -9,7 +9,7 @@ import {
   Timestamp,
 } from 'firebase/firestore';
 import { db } from './firebase';
-import { LoanRequest, User } from './types';
+import { LoanRequest, User, Payment } from './types';
 
 function parseLoanInformation(raw: Record<string, unknown>) {
   return {
@@ -75,6 +75,48 @@ export async function getUsers(): Promise<User[]> {
       admin: (data.admin as boolean) || false,
     };
   });
+}
+
+// Payments
+
+function parsePayment(docId: string, data: Record<string, unknown>): Payment {
+  const createdAt = data.created_at instanceof Timestamp
+    ? data.created_at.toDate()
+    : new Date();
+
+  return {
+    id: docId,
+    reference: (data.reference as string) || '',
+    type: (data.type as Payment['type']) || 'subscription',
+    status: (data.status as Payment['status']) || 'ERROR',
+    amount: (data.amount_in_cents as number) ? (data.amount_in_cents as number) / 100 : 0,
+    amountInCents: (data.amount_in_cents as number) || 0,
+    currency: (data.currency as string) || 'COP',
+    userPhone: (data.user_phone as string) || '',
+    userEmail: (data.user_email as string) || '',
+    userName: (data.user_name as string) || '',
+    loanId: (data.loan_id as string) || null,
+    installmentNumber: (data.installment_number as number) || null,
+    createdAt,
+  };
+}
+
+export async function getPayments(): Promise<Payment[]> {
+  const q = query(collection(db, 'payments'), orderBy('created_at', 'desc'));
+  const snapshot = await getDocs(q);
+  return snapshot.docs.map(d => parsePayment(d.id, d.data() as Record<string, unknown>));
+}
+
+export async function getPaymentsByPhone(phone: string): Promise<Payment[]> {
+  const q = query(collection(db, 'payments'), where('user_phone', '==', phone), orderBy('created_at', 'desc'));
+  const snapshot = await getDocs(q);
+  return snapshot.docs.map(d => parsePayment(d.id, d.data() as Record<string, unknown>));
+}
+
+export async function getPaymentsByLoanId(loanId: string): Promise<Payment[]> {
+  const q = query(collection(db, 'payments'), where('loan_id', '==', loanId), orderBy('created_at', 'desc'));
+  const snapshot = await getDocs(q);
+  return snapshot.docs.map(d => parsePayment(d.id, d.data() as Record<string, unknown>));
 }
 
 export async function saveFcmToken(uid: string, token: string): Promise<void> {

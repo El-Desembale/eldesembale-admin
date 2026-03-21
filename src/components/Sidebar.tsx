@@ -8,6 +8,7 @@ import { useAuth } from '@/hooks/useAuth';
 const NAV = [
   { href: '/', label: 'Solicitudes', icon: '📋' },
   { href: '/usuarios', label: 'Usuarios', icon: '👥' },
+  { href: '/pagos', label: 'Pagos', icon: '💰' },
 ];
 
 export function Sidebar() {

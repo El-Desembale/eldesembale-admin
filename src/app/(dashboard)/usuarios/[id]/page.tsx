@@ -5,15 +5,17 @@ import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { doc, getDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-import { getUserLoans } from '@/lib/firestore';
-import { User, LoanRequest } from '@/lib/types';
+import { getUserLoans, getPaymentsByPhone } from '@/lib/firestore';
+import { User, LoanRequest, Payment } from '@/lib/types';
 import { LoanCard } from '@/components/LoanCard';
+import { PaymentCard } from '@/components/PaymentCard';
 
 export default function UserDetailPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
   const [user, setUser] = useState<User | null>(null);
   const [loans, setLoans] = useState<LoanRequest[]>([]);
+  const [payments, setPayments] = useState<Payment[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -37,8 +39,12 @@ export default function UserDetailPage() {
         setUser(userData);
 
         if (userData.phone) {
-          const userLoans = await getUserLoans(userData.phone);
+          const [userLoans, userPayments] = await Promise.all([
+            getUserLoans(userData.phone),
+            getPaymentsByPhone(userData.phone),
+          ]);
           setLoans(userLoans);
+          setPayments(userPayments);
         }
       } catch (e) {
         console.error(e);
@@ -112,6 +118,19 @@ export default function UserDetailPage() {
         <div className="grid gap-3 sm:grid-cols-2">
           {loans.map(loan => (
             <LoanCard key={loan.id} loan={loan} userName={[user.name, user.lastName].filter(Boolean).join(' ') || undefined} />
+          ))}
+        </div>
+      )}
+      {/* User payments */}
+      <h2 className="text-white font-bold text-lg mb-3 mt-6">
+        Pagos ({payments.length})
+      </h2>
+      {payments.length === 0 ? (
+        <p className="text-gray-500">Sin pagos registrados</p>
+      ) : (
+        <div className="grid gap-3 sm:grid-cols-2">
+          {payments.map(payment => (
+            <PaymentCard key={payment.id} payment={payment} />
           ))}
         </div>
       )}

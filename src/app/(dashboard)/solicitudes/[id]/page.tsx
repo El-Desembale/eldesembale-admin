@@ -5,12 +5,13 @@ import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { doc, getDoc, query, collection, where, getDocs, Timestamp } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-import { updateLoanStatus } from '@/lib/firestore';
-import { LoanRequest } from '@/lib/types';
+import { updateLoanStatus, getPaymentsByLoanId } from '@/lib/firestore';
+import { LoanRequest, Payment } from '@/lib/types';
 import { isInMora, getDaysOverdue } from '@/lib/mora';
 import { StatusBadge } from '@/components/StatusBadge';
 import { LoanDocumentsDialog } from '@/components/LoanDocumentsDialog';
 import { ReminderDialog } from '@/components/ReminderDialog';
+import { PaymentCard } from '@/components/PaymentCard';
 
 const ACTION_STATUSES: { label: string; value: LoanRequest['status']; color: string }[] = [
   { label: 'Pendiente', value: 'pending', color: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30' },
@@ -56,6 +57,7 @@ export default function LoanDetailPage() {
   const [showReminder, setShowReminder] = useState(false);
   const [updating, setUpdating] = useState(false);
   const [clientInfo, setClientInfo] = useState<{ name: string; email?: string } | null>(null);
+  const [payments, setPayments] = useState<Payment[]>([]);
 
   useEffect(() => {
     const fetchLoan = async () => {
@@ -67,6 +69,9 @@ export default function LoanDetailPage() {
         }
         const parsed = parseLoanFromFirestore(loanDoc.id, loanDoc.data() as Record<string, unknown>);
         setLoan(parsed);
+        // Fetch payments for this loan
+        const loanPayments = await getPaymentsByLoanId(id);
+        setPayments(loanPayments);
         // Fetch client info by phone
         if (parsed.phone) {
           const q = query(collection(db, 'users'), where('phone', '==', parsed.phone));
@@ -240,6 +245,20 @@ export default function LoanDetailPage() {
         <span className="text-white font-semibold">Ver documentos</span>
         <span className="text-[#2FFF00]">→</span>
       </button>
+
+      {/* Payment history */}
+      <div className="bg-[#0d1f0d] border border-[#2FFF00]/20 rounded-2xl p-5 mb-4">
+        <h2 className="text-white font-semibold mb-3">Historial de pagos ({payments.length})</h2>
+        {payments.length === 0 ? (
+          <p className="text-gray-500 text-sm">Sin pagos registrados</p>
+        ) : (
+          <div className="grid gap-3">
+            {payments.map(payment => (
+              <PaymentCard key={payment.id} payment={payment} />
+            ))}
+          </div>
+        )}
+      </div>
 
       {/* Status actions */}
       <div className="bg-[#0d1f0d] border border-[#2FFF00]/20 rounded-2xl p-5">
