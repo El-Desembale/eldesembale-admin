@@ -111,6 +111,21 @@ export default function LoanDetailPage() {
     try {
       await updateLoanStatus(loan.id, status);
       setLoan(prev => prev ? { ...prev, status } : prev);
+
+      // Notify client via email
+      if (clientInfo?.email) {
+        fetch('/api/notify-status-change', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            email: clientInfo.email,
+            userName: clientInfo.name || '',
+            loanId: loan.id,
+            amount: loan.amount,
+            newStatus: status,
+          }),
+        }).catch(() => {});
+      }
     } catch (e) {
       console.error(e);
     } finally {
