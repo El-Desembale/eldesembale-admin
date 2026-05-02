@@ -51,9 +51,16 @@ export async function getLoans(): Promise<LoanRequest[]> {
 }
 
 export async function getUserLoans(phone: string): Promise<LoanRequest[]> {
-  const q = query(collection(db, 'loan_request'), where('phone', '==', phone));
-  const snapshot = await getDocs(q);
-  return snapshot.docs.map(d => parseLoan(d.id, d.data() as Record<string, unknown>));
+  console.log('[getUserLoans] querying phone:', JSON.stringify(phone), 'len:', phone.length);
+  try {
+    const q = query(collection(db, 'loan_request'), where('phone', '==', phone));
+    const snapshot = await getDocs(q);
+    console.log('[getUserLoans] docs found:', snapshot.size);
+    return snapshot.docs.map(d => parseLoan(d.id, d.data() as Record<string, unknown>));
+  } catch (e) {
+    console.error('[getUserLoans] error:', e);
+    throw e;
+  }
 }
 
 export async function updateLoanStatus(loanId: string, status: LoanRequest['status']): Promise<void> {
