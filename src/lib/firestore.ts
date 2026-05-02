@@ -5,7 +5,6 @@ import {
   updateDoc,
   query,
   orderBy,
-  where,
   Timestamp,
 } from 'firebase/firestore';
 import { db } from './firebase';
@@ -51,16 +50,11 @@ export async function getLoans(): Promise<LoanRequest[]> {
 }
 
 export async function getUserLoans(phone: string): Promise<LoanRequest[]> {
-  console.log('[getUserLoans] querying phone:', JSON.stringify(phone), 'len:', phone.length);
-  try {
-    const q = query(collection(db, 'loan_request'), where('phone', '==', phone));
-    const snapshot = await getDocs(q);
-    console.log('[getUserLoans] docs found:', snapshot.size);
-    return snapshot.docs.map(d => parseLoan(d.id, d.data() as Record<string, unknown>));
-  } catch (e) {
-    console.error('[getUserLoans] error:', e);
-    throw e;
-  }
+  // Filtra client-side sobre la colección completa: las reglas de Firestore
+  // permiten listar `loan_request` pero pueden rechazar queries con `where`
+  // específicas, lo cual deja la lista en blanco sin error visible.
+  const all = await getLoans();
+  return all.filter(l => l.phone === phone);
 }
 
 export async function updateLoanStatus(loanId: string, status: LoanRequest['status']): Promise<void> {
@@ -127,15 +121,13 @@ export async function getPayments(): Promise<Payment[]> {
 }
 
 export async function getPaymentsByPhone(phone: string): Promise<Payment[]> {
-  const q = query(collection(db, 'payments'), where('user_phone', '==', phone), orderBy('created_at', 'desc'));
-  const snapshot = await getDocs(q);
-  return snapshot.docs.map(d => parsePayment(d.id, d.data() as Record<string, unknown>));
+  const all = await getPayments();
+  return all.filter(p => p.userPhone === phone);
 }
 
 export async function getPaymentsByLoanId(loanId: string): Promise<Payment[]> {
-  const q = query(collection(db, 'payments'), where('loan_id', '==', loanId), orderBy('created_at', 'desc'));
-  const snapshot = await getDocs(q);
-  return snapshot.docs.map(d => parsePayment(d.id, d.data() as Record<string, unknown>));
+  const all = await getPayments();
+  return all.filter(p => p.loanId === loanId);
 }
 
 // Budget
