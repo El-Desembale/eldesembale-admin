@@ -114,17 +114,29 @@ export default function LoanDetailPage() {
 
       // Notify client via email
       if (clientInfo?.email) {
-        fetch('/api/notify-status-change', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            email: clientInfo.email,
-            userName: clientInfo.name || '',
-            loanId: loan.id,
-            amount: loan.amount,
-            newStatus: status,
-          }),
-        }).catch(() => {});
+        try {
+          const res = await fetch('/api/notify-status-change', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              email: clientInfo.email,
+              userName: clientInfo.name || '',
+              loanId: loan.id,
+              amount: loan.amount,
+              newStatus: status,
+            }),
+          });
+          if (!res.ok) {
+            const data = await res.json().catch(() => ({}));
+            console.error('notify-status-change failed', res.status, data);
+            alert(`No se pudo enviar el correo: ${data.error || res.statusText}`);
+          }
+        } catch (e) {
+          console.error('notify-status-change error', e);
+          alert('No se pudo enviar el correo (error de red).');
+        }
+      } else {
+        alert('El cliente no tiene correo registrado, no se envió notificación.');
       }
     } catch (e) {
       console.error(e);
