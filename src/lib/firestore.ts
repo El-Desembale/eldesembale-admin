@@ -90,6 +90,10 @@ export async function updateUserPassword(userId: string, newPassword: string): P
   await updateDoc(doc(db, 'users', userId), { password: newPassword });
 }
 
+export async function updateUserSubscription(userId: string, isSubscribed: boolean): Promise<void> {
+  await updateDoc(doc(db, 'users', userId), { isSubscribed });
+}
+
 // Payments
 
 function parsePayment(docId: string, data: Record<string, unknown>): Payment {
