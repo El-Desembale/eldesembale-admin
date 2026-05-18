@@ -5,7 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { doc, getDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-import { getUserLoans, getPaymentsByPhone, getUserPassword, updateUserPassword } from '@/lib/firestore';
+import { getUserLoans, getPaymentsByPhone, getUserPassword, updateUserPassword, updateUserSubscription } from '@/lib/firestore';
 import { User, LoanRequest, Payment } from '@/lib/types';
 import { LoanCard } from '@/components/LoanCard';
 import { PaymentCard } from '@/components/PaymentCard';
@@ -23,6 +23,8 @@ export default function UserDetailPage() {
   const [editingPassword, setEditingPassword] = useState(false);
   const [savingPassword, setSavingPassword] = useState(false);
   const [passwordMsg, setPasswordMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [savingSubscription, setSavingSubscription] = useState(false);
+  const [subscriptionMsg, setSubscriptionMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -72,6 +74,23 @@ export default function UserDetailPage() {
       </div>
     );
   }
+
+  const handleToggleSubscription = async () => {
+    if (!user) return;
+    setSavingSubscription(true);
+    setSubscriptionMsg(null);
+    try {
+      const newValue = !user.isSubscribed;
+      await updateUserSubscription(id, newValue);
+      setUser({ ...user, isSubscribed: newValue });
+      setSubscriptionMsg({ type: 'success', text: newValue ? 'Usuario marcado como suscrito' : 'Suscripción removida' });
+      setTimeout(() => setSubscriptionMsg(null), 3000);
+    } catch {
+      setSubscriptionMsg({ type: 'error', text: 'Error al actualizar la suscripción' });
+    } finally {
+      setSavingSubscription(false);
+    }
+  };
 
   const handleSavePassword = async () => {
     if (!newPassword || newPassword.length < 4) {
@@ -208,6 +227,36 @@ export default function UserDetailPage() {
         {passwordMsg && (
           <p className={`text-xs mt-2 ${passwordMsg.type === 'success' ? 'text-[#2FFF00]' : 'text-red-400'}`}>
             {passwordMsg.text}
+          </p>
+        )}
+      </div>
+
+      {/* Subscription section */}
+      <div className="bg-[#0d1f0d] border border-[#2FFF00]/20 rounded-2xl p-5 mb-6">
+        <div className="flex items-center justify-between mb-3">
+          <div>
+            <h2 className="text-white font-semibold">Suscripción</h2>
+            <p className="text-gray-500 text-xs mt-0.5">
+              {user.isSubscribed ? 'El usuario tiene acceso completo a la plataforma.' : 'El usuario aún no está suscrito.'}
+            </p>
+          </div>
+          <button
+            onClick={handleToggleSubscription}
+            disabled={savingSubscription}
+            className={`relative inline-flex h-7 w-12 items-center rounded-full transition-colors disabled:opacity-50 ${
+              user.isSubscribed ? 'bg-[#2FFF00]' : 'bg-white/10'
+            }`}
+          >
+            <span
+              className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform ${
+                user.isSubscribed ? 'translate-x-6' : 'translate-x-1'
+              }`}
+            />
+          </button>
+        </div>
+        {subscriptionMsg && (
+          <p className={`text-xs mt-1 ${subscriptionMsg.type === 'success' ? 'text-[#2FFF00]' : 'text-red-400'}`}>
+            {subscriptionMsg.text}
           </p>
         )}
       </div>
