@@ -38,28 +38,33 @@ export async function POST(req: NextRequest) {
   const loanUrl = `https://eldesembale-admin.vercel.app/solicitudes/${loanId}`;
 
   const html = `
-    <div style="font-family: Arial, sans-serif; max-width: 500px; margin: 0 auto; background: #0a1a0a; border-radius: 16px; padding: 32px; color: #ffffff;">
-      <h2 style="color: #2FFF00; margin: 0 0 24px 0; font-size: 20px;">Nueva solicitud de préstamo</h2>
-      <table style="width: 100%; border-collapse: collapse;">
+    <div style="font-family: Arial, sans-serif; max-width: 500px; margin: 0 auto; background: #ffffff; border-radius: 16px; padding: 32px; color: #0f172a; border: 1px solid #e2e8f0;">
+      <h2 style="color: #2563eb; margin: 0 0 8px 0; font-size: 20px;">🔔 Nueva solicitud de préstamo</h2>
+      <p style="color: #9ca3af; margin: 0 0 24px 0; font-size: 13px;">Se ha recibido una nueva solicitud</p>
+      <div style="background: #f8fafc; border-radius: 12px; padding: 20px; margin-bottom: 20px; border: 1px solid #e2e8f0;">
+        <p style="color: #9ca3af; font-size: 13px; margin: 0 0 4px 0;">Monto solicitado</p>
+        <p style="color: #2563eb; font-size: 26px; font-weight: bold; margin: 0;">${amountFormatted}</p>
+      </div>
+      <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px;">
         <tr>
-          <td style="padding: 8px 0; color: #9ca3af; font-size: 14px;">Cliente</td>
-          <td style="padding: 8px 0; color: #ffffff; font-size: 14px; text-align: right; font-weight: bold;">${clientDisplay}</td>
+          <td style="padding: 8px 0; color: #9ca3af; font-size: 13px;">Cliente</td>
+          <td style="padding: 8px 0; color: #0f172a; font-size: 14px; text-align: right; font-weight: bold;">${clientDisplay}</td>
         </tr>
         <tr>
-          <td style="padding: 8px 0; color: #9ca3af; font-size: 14px;">Monto</td>
-          <td style="padding: 8px 0; color: #2FFF00; font-size: 18px; text-align: right; font-weight: bold;">${amountFormatted}</td>
+          <td style="padding: 8px 0; color: #9ca3af; font-size: 13px;">Cuotas</td>
+          <td style="padding: 8px 0; color: #0f172a; font-size: 14px; text-align: right;">${installments} cuotas</td>
         </tr>
         <tr>
-          <td style="padding: 8px 0; color: #9ca3af; font-size: 14px;">Cuotas</td>
-          <td style="padding: 8px 0; color: #ffffff; font-size: 14px; text-align: right;">${installments} cuotas</td>
+          <td style="padding: 8px 0; color: #9ca3af; font-size: 13px;">Período de pago</td>
+          <td style="padding: 8px 0; color: #0f172a; font-size: 14px; text-align: right;">${paymentPeriod}</td>
         </tr>
         <tr>
-          <td style="padding: 8px 0; color: #9ca3af; font-size: 14px;">Período</td>
-          <td style="padding: 8px 0; color: #ffffff; font-size: 14px; text-align: right;">${paymentPeriod}</td>
+          <td style="padding: 8px 0; color: #9ca3af; font-size: 13px;">No. solicitud</td>
+          <td style="padding: 8px 0; color: #9ca3af; font-size: 12px; text-align: right;">${loanId.slice(0, 8)}...</td>
         </tr>
       </table>
       <div style="margin-top: 24px; text-align: center;">
-        <a href="${loanUrl}" style="display: inline-block; background: #2FFF00; color: #000000; padding: 12px 32px; border-radius: 24px; text-decoration: none; font-weight: bold; font-size: 14px;">
+        <a href="${loanUrl}" style="display: inline-block; background: #2563eb; color: #ffffff; padding: 12px 32px; border-radius: 24px; text-decoration: none; font-weight: bold; font-size: 14px;">
           Ver solicitud
         </a>
       </div>
