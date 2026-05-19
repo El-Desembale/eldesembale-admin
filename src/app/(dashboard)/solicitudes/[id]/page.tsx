@@ -121,6 +121,10 @@ export default function LoanDetailPage() {
               loanId: loan.id,
               amount: loan.amount,
               newStatus: status,
+              installments: loan.installments,
+              paymentPeriod: loan.paymentPeriod,
+              interest: loan.interest,
+              createdAt: loan.createdAt.toISOString(),
             }),
           });
           if (!res.ok) {
