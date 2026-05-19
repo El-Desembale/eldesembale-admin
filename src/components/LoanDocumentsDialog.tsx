@@ -24,26 +24,26 @@ export function LoanDocumentsDialog({ loanInfo, onClose }: Props) {
     currentUrl?.toLowerCase().includes('application/pdf');
 
   return (
-    <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
-      <div className="bg-[#0a1a0a] border border-[#2FFF00]/30 rounded-2xl w-full max-w-2xl max-h-[90vh] flex flex-col">
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white border border-slate-200 rounded-2xl w-full max-w-2xl max-h-[90vh] flex flex-col shadow-xl">
         {/* Header */}
-        <div className="flex justify-between items-center p-4 border-b border-[#2FFF00]/20">
-          <h2 className="text-white font-bold text-lg">Documentos</h2>
-          <button onClick={onClose} className="text-gray-400 hover:text-white text-2xl leading-none">
+        <div className="flex justify-between items-center p-4 border-b border-slate-200">
+          <h2 className="text-slate-900 font-bold text-lg">Documentos</h2>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-600 text-2xl leading-none">
             ×
           </button>
         </div>
 
         {/* Tabs */}
-        <div className="flex gap-2 p-4 border-b border-[#2FFF00]/20 overflow-x-auto">
+        <div className="flex gap-2 p-4 border-b border-slate-200 overflow-x-auto">
           {TABS.map(tab => (
             <button
               key={tab.key}
               onClick={() => setActiveTab(tab.key)}
               className={`px-3 py-1.5 rounded-full text-sm font-medium whitespace-nowrap transition-all ${
                 activeTab === tab.key
-                  ? 'bg-[#2FFF00] text-black'
-                  : 'bg-[#2FFF00]/10 text-[#2FFF00] hover:bg-[#2FFF00]/20'
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
               }`}
             >
               {tab.label}
@@ -68,7 +68,7 @@ export function LoanDocumentsDialog({ loanInfo, onClose }: Props) {
               />
             )
           ) : (
-            <p className="text-gray-500">No hay documento disponible</p>
+            <p className="text-slate-400">No hay documento disponible</p>
           )}
         </div>
       </div>

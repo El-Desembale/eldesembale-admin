@@ -63,7 +63,7 @@ export default function ConfiguracionPage() {
   if (loading) {
     return (
       <div className="flex justify-center py-16">
-        <div className="w-8 h-8 border-2 border-[#2FFF00] border-t-transparent rounded-full animate-spin" />
+        <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
       </div>
     );
   }
@@ -71,42 +71,42 @@ export default function ConfiguracionPage() {
   return (
     <div className="max-w-xl">
       <div className="mb-6">
-        <h1 className="text-white text-2xl font-bold">Configuración</h1>
-        <p className="text-gray-400 text-sm mt-1">Parámetros de Wompi y pagos</p>
+        <h1 className="text-slate-900 text-2xl font-bold">Configuración</h1>
+        <p className="text-slate-500 text-sm mt-1">Parámetros de Wompi y pagos</p>
       </div>
 
-      <div className="bg-[#0d1f0d] border border-[#2FFF00]/20 rounded-2xl p-6 space-y-5">
+      <div className="bg-white border border-slate-200 rounded-2xl p-6 space-y-5 shadow-sm">
         <div>
-          <label className="block text-gray-400 text-sm mb-2">Llave pública (Public Key)</label>
+          <label className="block text-slate-700 text-sm font-medium mb-2">Llave pública (Public Key)</label>
           <input
             type="text"
             value={config.publicKey}
             onChange={e => setConfig(prev => ({ ...prev, publicKey: e.target.value }))}
             placeholder="pub_test_..."
-            className="w-full bg-[#061006] border border-[#2FFF00]/20 rounded-xl px-4 py-3 text-white placeholder-gray-600 focus:outline-none focus:border-[#2FFF00]/60 transition-colors font-mono text-sm"
+            className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-slate-900 placeholder-slate-400 focus:outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400 transition-colors font-mono text-sm"
           />
         </div>
 
         <div>
-          <label className="block text-gray-400 text-sm mb-2">Llave de integridad (Integrity Key)</label>
+          <label className="block text-slate-700 text-sm font-medium mb-2">Llave de integridad (Integrity Key)</label>
           <input
             type="password"
             value={config.integrityKey}
             onChange={e => setConfig(prev => ({ ...prev, integrityKey: e.target.value }))}
             placeholder="••••••••••••••••"
-            className="w-full bg-[#061006] border border-[#2FFF00]/20 rounded-xl px-4 py-3 text-white placeholder-gray-600 focus:outline-none focus:border-[#2FFF00]/60 transition-colors font-mono text-sm"
+            className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-slate-900 placeholder-slate-400 focus:outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400 transition-colors font-mono text-sm"
           />
         </div>
 
         <div>
-          <label className="block text-gray-400 text-sm mb-2">Valor suscripción (COP)</label>
+          <label className="block text-slate-700 text-sm font-medium mb-2">Valor suscripción (COP)</label>
           <input
             type="number"
             value={config.subscriptionAmount}
             onChange={e => setConfig(prev => ({ ...prev, subscriptionAmount: Number(e.target.value) }))}
-            className="w-full bg-[#061006] border border-[#2FFF00]/20 rounded-xl px-4 py-3 text-white placeholder-gray-600 focus:outline-none focus:border-[#2FFF00]/60 transition-colors"
+            className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-slate-900 placeholder-slate-400 focus:outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400 transition-colors"
           />
-          <p className="text-gray-600 text-xs mt-1">
+          <p className="text-slate-400 text-xs mt-1">
             Valor actual: ${config.subscriptionAmount.toLocaleString('es-CO')} COP
           </p>
         </div>
@@ -114,13 +114,13 @@ export default function ConfiguracionPage() {
         <button
           onClick={handleSave}
           disabled={saving}
-          className="w-full bg-[#2FFF00] text-black font-semibold py-3 rounded-xl hover:bg-[#2FFF00]/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          className="w-full bg-blue-600 text-white font-semibold py-3 rounded-xl hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {saving ? 'Guardando...' : saved ? '✓ Guardado' : 'Guardar cambios'}
         </button>
       </div>
 
-      <p className="text-gray-600 text-xs mt-4">
+      <p className="text-slate-400 text-xs mt-4">
         Los cambios aplican inmediatamente en la app. Las llaves se guardan de forma segura en Firestore.
       </p>
     </div>

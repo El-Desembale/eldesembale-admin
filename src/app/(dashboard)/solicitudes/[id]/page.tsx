@@ -14,11 +14,11 @@ import { ReminderDialog } from '@/components/ReminderDialog';
 import { PaymentCard } from '@/components/PaymentCard';
 
 const ACTION_STATUSES: { label: string; value: LoanRequest['status']; color: string }[] = [
-  { label: 'Pendiente', value: 'pending', color: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30' },
-  { label: 'En proceso', value: 'in_process', color: 'bg-blue-500/20 text-blue-400 border-blue-500/30' },
-  { label: 'En desembolso', value: 'in_disbursement_process', color: 'bg-purple-500/20 text-purple-400 border-purple-500/30' },
-  { label: 'Aprobar', value: 'approved', color: 'bg-[#2FFF00]/20 text-[#2FFF00] border-[#2FFF00]/30' },
-  { label: 'Rechazar', value: 'rejected', color: 'bg-red-500/20 text-red-400 border-red-500/30' },
+  { label: 'Pendiente', value: 'pending', color: 'bg-yellow-50 text-yellow-700 border-yellow-200 hover:bg-yellow-100' },
+  { label: 'En proceso', value: 'in_process', color: 'bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100' },
+  { label: 'En desembolso', value: 'in_disbursement_process', color: 'bg-purple-50 text-purple-700 border-purple-200 hover:bg-purple-100' },
+  { label: 'Aprobar', value: 'approved', color: 'bg-green-50 text-green-700 border-green-200 hover:bg-green-100' },
+  { label: 'Rechazar', value: 'rejected', color: 'bg-red-50 text-red-700 border-red-200 hover:bg-red-100' },
 ];
 
 function parseLoanFromFirestore(id: string, data: Record<string, unknown>): LoanRequest {
@@ -70,10 +70,8 @@ export default function LoanDetailPage() {
         }
         const parsed = parseLoanFromFirestore(loanDoc.id, loanDoc.data() as Record<string, unknown>);
         setLoan(parsed);
-        // Fetch payments for this loan
         const loanPayments = await getPaymentsByLoanId(id);
         setPayments(loanPayments);
-        // Fetch client info by phone
         if (parsed.phone) {
           const q = query(collection(db, 'users'), where('phone', '==', parsed.phone));
           const snap = await getDocs(q);
@@ -85,7 +83,6 @@ export default function LoanDetailPage() {
             });
           }
         }
-        // Calculate available funds for budget check
         const [budgetConfig, allLoans] = await Promise.all([getBudgetConfig(), getLoans()]);
         if (budgetConfig && budgetConfig.totalCapital > 0) {
           const approvedLoans = allLoans.filter(l => l.status === 'approved');
@@ -112,7 +109,6 @@ export default function LoanDetailPage() {
       await updateLoanStatus(loan.id, status);
       setLoan(prev => prev ? { ...prev, status } : prev);
 
-      // Notify client via email
       if (clientInfo?.email) {
         try {
           const res = await fetch('/api/notify-status-change', {
@@ -148,7 +144,7 @@ export default function LoanDetailPage() {
   if (loading) {
     return (
       <div className="flex justify-center py-16">
-        <div className="w-8 h-8 border-2 border-[#2FFF00] border-t-transparent rounded-full animate-spin" />
+        <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
       </div>
     );
   }
@@ -174,13 +170,13 @@ export default function LoanDetailPage() {
   return (
     <div className="max-w-2xl">
       <div className="flex items-center justify-between mb-6">
-        <Link href="/" className="text-gray-400 hover:text-[#2FFF00] transition-colors">
+        <Link href="/" className="text-slate-500 hover:text-blue-600 transition-colors text-sm font-medium">
           ← Solicitudes
         </Link>
         {mora && (
           <button
             onClick={() => setShowReminder(true)}
-            className="flex items-center gap-2 bg-orange-500/20 border border-orange-500/40 text-orange-300 px-4 py-2 rounded-xl text-sm font-medium hover:bg-orange-500/30 transition-colors"
+            className="flex items-center gap-2 bg-orange-50 border border-orange-200 text-orange-600 px-4 py-2 rounded-xl text-sm font-medium hover:bg-orange-100 transition-colors"
           >
             <span>📩</span> Enviar recordatorio
           </button>
@@ -189,64 +185,64 @@ export default function LoanDetailPage() {
 
       {/* Mora banner */}
       {mora && (
-        <div className="bg-orange-500/10 border border-orange-500/30 rounded-xl px-4 py-3 mb-4 flex items-center justify-between">
+        <div className="bg-orange-50 border border-orange-200 rounded-xl px-4 py-3 mb-4 flex items-center justify-between">
           <div>
-            <p className="text-orange-400 font-semibold text-sm">⚠ Préstamo en mora</p>
-            <p className="text-orange-300/70 text-xs mt-0.5">{daysOverdue} días de atraso · {loan.installmentsPaid} de {loan.installments} cuotas pagadas</p>
+            <p className="text-orange-600 font-semibold text-sm">⚠ Préstamo en mora</p>
+            <p className="text-orange-500/70 text-xs mt-0.5">{daysOverdue} días de atraso · {loan.installmentsPaid} de {loan.installments} cuotas pagadas</p>
           </div>
         </div>
       )}
 
       {/* Main info */}
-      <div className="bg-[#0d1f0d] border border-[#2FFF00]/20 rounded-2xl p-6 mb-4">
+      <div className="bg-white border border-slate-200 rounded-2xl p-6 mb-4 shadow-sm">
         <div className="flex justify-between items-start mb-4">
           <div>
             {clientInfo?.name && (
-              <p className="text-white font-semibold text-lg mb-1">{clientInfo.name}</p>
+              <p className="text-slate-900 font-semibold text-lg mb-1">{clientInfo.name}</p>
             )}
-            <p className="text-[#2FFF00] text-3xl font-bold">{amount}</p>
-            <p className="text-gray-400 text-sm mt-1">{loan.phone}</p>
+            <p className="text-blue-600 text-3xl font-bold">{amount}</p>
+            <p className="text-slate-400 text-sm mt-1">{loan.phone}</p>
           </div>
           <StatusBadge status={loan.status} />
         </div>
 
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-sm">
           <div>
-            <p className="text-gray-500 text-xs">Cuotas</p>
-            <p className="text-white">{loan.installments}</p>
+            <p className="text-slate-400 text-xs">Cuotas</p>
+            <p className="text-slate-900">{loan.installments}</p>
           </div>
           <div>
-            <p className="text-gray-500 text-xs">Cuotas pagadas</p>
-            <p className="text-white">{loan.installmentsPaid}</p>
+            <p className="text-slate-400 text-xs">Cuotas pagadas</p>
+            <p className="text-slate-900">{loan.installmentsPaid}</p>
           </div>
           <div>
-            <p className="text-gray-500 text-xs">Interés</p>
-            <p className="text-white">{loan.interest}%</p>
+            <p className="text-slate-400 text-xs">Interés</p>
+            <p className="text-slate-900">{loan.interest}%</p>
           </div>
           <div>
-            <p className="text-gray-500 text-xs">Período</p>
-            <p className="text-white">{loan.paymentPeriod}</p>
+            <p className="text-slate-400 text-xs">Período</p>
+            <p className="text-slate-900">{loan.paymentPeriod}</p>
           </div>
           <div>
-            <p className="text-gray-500 text-xs">Fecha</p>
-            <p className="text-white">{date}</p>
+            <p className="text-slate-400 text-xs">Fecha</p>
+            <p className="text-slate-900">{date}</p>
           </div>
           <div>
-            <p className="text-gray-500 text-xs">Suscrito</p>
-            <p className="text-white">{loan.isSubscribed ? 'Sí' : 'No'}</p>
+            <p className="text-slate-400 text-xs">Suscrito</p>
+            <p className="text-slate-900">{loan.isSubscribed ? 'Sí' : 'No'}</p>
           </div>
         </div>
       </div>
 
       {/* Bank info */}
       {Object.keys(bank).length > 0 && (
-        <div className="bg-[#0d1f0d] border border-[#2FFF00]/20 rounded-2xl p-5 mb-4">
-          <h2 className="text-white font-semibold mb-3">Información bancaria</h2>
+        <div className="bg-white border border-slate-200 rounded-2xl p-5 mb-4 shadow-sm">
+          <h2 className="text-slate-900 font-semibold mb-3">Información bancaria</h2>
           <div className="grid grid-cols-2 gap-2 text-sm">
             {Object.entries(bank).map(([key, val]) => (
               <div key={key}>
-                <p className="text-gray-500 text-xs capitalize">{key.replace(/_/g, ' ')}</p>
-                <p className="text-white">{val}</p>
+                <p className="text-slate-400 text-xs capitalize">{key.replace(/_/g, ' ')}</p>
+                <p className="text-slate-900">{val}</p>
               </div>
             ))}
           </div>
@@ -254,24 +250,24 @@ export default function LoanDetailPage() {
       )}
 
       {/* References */}
-      <div className="bg-[#0d1f0d] border border-[#2FFF00]/20 rounded-2xl p-5 mb-4">
-        <h2 className="text-white font-semibold mb-3">Referencias</h2>
+      <div className="bg-white border border-slate-200 rounded-2xl p-5 mb-4 shadow-sm">
+        <h2 className="text-slate-900 font-semibold mb-3">Referencias</h2>
         <div className="grid sm:grid-cols-2 gap-4 text-sm">
           <div>
-            <p className="text-gray-500 text-xs mb-1">Referencia 1</p>
-            <p className="text-white">{loan.loanInformation.firstReference.phone || '—'}</p>
-            <p className="text-gray-400">{loan.loanInformation.firstReference.relationship || '—'}</p>
+            <p className="text-slate-400 text-xs mb-1">Referencia 1</p>
+            <p className="text-slate-900">{loan.loanInformation.firstReference.phone || '—'}</p>
+            <p className="text-slate-500">{loan.loanInformation.firstReference.relationship || '—'}</p>
           </div>
           <div>
-            <p className="text-gray-500 text-xs mb-1">Referencia 2</p>
-            <p className="text-white">{loan.loanInformation.secondReference.phone || '—'}</p>
-            <p className="text-gray-400">{loan.loanInformation.secondReference.relationship || '—'}</p>
+            <p className="text-slate-400 text-xs mb-1">Referencia 2</p>
+            <p className="text-slate-900">{loan.loanInformation.secondReference.phone || '—'}</p>
+            <p className="text-slate-500">{loan.loanInformation.secondReference.relationship || '—'}</p>
           </div>
         </div>
         {loan.loanInformation.direction && (
           <div className="mt-3">
-            <p className="text-gray-500 text-xs">Dirección</p>
-            <p className="text-white text-sm">{loan.loanInformation.direction}</p>
+            <p className="text-slate-400 text-xs">Dirección</p>
+            <p className="text-slate-900 text-sm">{loan.loanInformation.direction}</p>
           </div>
         )}
       </div>
@@ -279,17 +275,17 @@ export default function LoanDetailPage() {
       {/* Documents */}
       <button
         onClick={() => setShowDocs(true)}
-        className="w-full bg-[#0d1f0d] border border-[#2FFF00]/20 rounded-2xl p-4 text-left hover:border-[#2FFF00]/60 transition-colors mb-4 flex justify-between items-center"
+        className="w-full bg-white border border-slate-200 rounded-2xl p-4 text-left hover:border-blue-300 hover:shadow-md transition-all mb-4 flex justify-between items-center shadow-sm"
       >
-        <span className="text-white font-semibold">Ver documentos</span>
-        <span className="text-[#2FFF00]">→</span>
+        <span className="text-slate-900 font-semibold">Ver documentos</span>
+        <span className="text-blue-600">→</span>
       </button>
 
       {/* Payment history */}
-      <div className="bg-[#0d1f0d] border border-[#2FFF00]/20 rounded-2xl p-5 mb-4">
-        <h2 className="text-white font-semibold mb-3">Historial de pagos ({payments.length})</h2>
+      <div className="bg-white border border-slate-200 rounded-2xl p-5 mb-4 shadow-sm">
+        <h2 className="text-slate-900 font-semibold mb-3">Historial de pagos ({payments.length})</h2>
         {payments.length === 0 ? (
-          <p className="text-gray-500 text-sm">Sin pagos registrados</p>
+          <p className="text-slate-400 text-sm">Sin pagos registrados</p>
         ) : (
           <div className="grid gap-3">
             {payments.map(payment => (
@@ -301,17 +297,17 @@ export default function LoanDetailPage() {
 
       {/* Insufficient funds warning */}
       {availableFunds !== null && availableFunds < loan.amount && loan.status !== 'approved' && (
-        <div className="bg-red-500/10 border border-red-500/30 rounded-xl px-4 py-3 mb-4">
-          <p className="text-red-400 font-semibold text-sm">Fondos insuficientes</p>
-          <p className="text-red-300/70 text-xs mt-0.5">
+        <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 mb-4">
+          <p className="text-red-600 font-semibold text-sm">Fondos insuficientes</p>
+          <p className="text-red-500/70 text-xs mt-0.5">
             Disponible: {new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 }).format(availableFunds)} — Este préstamo requiere: {amount}
           </p>
         </div>
       )}
 
       {/* Status actions */}
-      <div className="bg-[#0d1f0d] border border-[#2FFF00]/20 rounded-2xl p-5">
-        <h2 className="text-white font-semibold mb-3">Cambiar estado</h2>
+      <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
+        <h2 className="text-slate-900 font-semibold mb-3">Cambiar estado</h2>
         <div className="flex flex-wrap gap-2">
           {ACTION_STATUSES.map(action => {
             const insufficientFunds = action.value === 'approved' && availableFunds !== null && availableFunds < loan.amount;
@@ -322,7 +318,7 @@ export default function LoanDetailPage() {
                 disabled={updating || loan.status === action.value || insufficientFunds}
                 title={insufficientFunds ? 'Fondos insuficientes para aprobar este préstamo' : undefined}
                 className={`px-3 py-1.5 rounded-full text-sm font-medium border transition-all disabled:opacity-40 ${action.color} ${
-                  loan.status === action.value ? 'opacity-100 ring-2 ring-white/20' : 'hover:opacity-80'
+                  loan.status === action.value ? 'ring-2 ring-blue-300' : ''
                 }`}
               >
                 {loan.status === action.value && '✓ '}{action.label}

@@ -49,17 +49,17 @@ export default function HomePage() {
     <div>
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-white text-2xl font-bold">Solicitudes</h1>
-          <p className="text-gray-400 text-sm mt-1">
+          <h1 className="text-slate-900 text-2xl font-bold">Solicitudes</h1>
+          <p className="text-slate-500 text-sm mt-1">
             {loans.length} solicitudes en total
             {moraCount > 0 && (
-              <span className="ml-2 text-orange-400 font-medium">· {moraCount} en mora</span>
+              <span className="ml-2 text-orange-500 font-medium">· {moraCount} en mora</span>
             )}
           </p>
         </div>
         <button
           onClick={refetch}
-          className="text-[#2FFF00] border border-[#2FFF00]/30 px-3 py-1.5 rounded-lg text-sm hover:bg-[#2FFF00]/10 transition-colors"
+          className="text-blue-600 border border-blue-200 px-3 py-1.5 rounded-lg text-sm hover:bg-blue-50 transition-colors font-medium"
         >
           Actualizar
         </button>
@@ -70,7 +70,7 @@ export default function HomePage() {
         value={search}
         onChange={e => setSearch(e.target.value)}
         placeholder="Buscar por teléfono o nombre..."
-        className="w-full bg-[#0d1f0d] border border-[#2FFF00]/20 rounded-xl px-4 py-3 text-white placeholder-gray-600 focus:outline-none focus:border-[#2FFF00]/60 transition-colors mb-4"
+        className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-slate-900 placeholder-slate-400 focus:outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400 transition-colors mb-4 shadow-sm"
       />
 
       <div className="flex gap-2 flex-wrap mb-6">
@@ -83,15 +83,15 @@ export default function HomePage() {
               onClick={() => setFilter(f.value)}
               className={`px-3 py-1.5 rounded-full text-sm font-medium transition-all ${
                 isActive
-                  ? isMora ? 'bg-orange-500 text-white' : 'bg-[#2FFF00] text-black'
+                  ? isMora ? 'bg-orange-500 text-white' : 'bg-blue-600 text-white'
                   : isMora
-                    ? 'bg-orange-500/15 text-orange-400 hover:bg-orange-500/25'
-                    : 'bg-[#2FFF00]/10 text-[#2FFF00] hover:bg-[#2FFF00]/20'
+                    ? 'bg-orange-50 text-orange-500 hover:bg-orange-100 border border-orange-200'
+                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
               }`}
             >
               {f.label}
               {isMora && moraCount > 0 && (
-                <span className={`ml-1.5 px-1.5 py-0.5 rounded-full text-xs font-bold ${isActive ? 'bg-white/20' : 'bg-orange-500/30'}`}>
+                <span className={`ml-1.5 px-1.5 py-0.5 rounded-full text-xs font-bold ${isActive ? 'bg-white/20' : 'bg-orange-100'}`}>
                   {moraCount}
                 </span>
               )}
@@ -102,12 +102,12 @@ export default function HomePage() {
 
       {loading ? (
         <div className="flex justify-center py-16">
-          <div className="w-8 h-8 border-2 border-[#2FFF00] border-t-transparent rounded-full animate-spin" />
+          <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
         </div>
       ) : error ? (
-        <p className="text-red-400 text-center py-8">{error}</p>
+        <p className="text-red-500 text-center py-8">{error}</p>
       ) : filtered.length === 0 ? (
-        <p className="text-gray-500 text-center py-8">No hay solicitudes</p>
+        <p className="text-slate-400 text-center py-8">No hay solicitudes</p>
       ) : (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {filtered.map(loan => (

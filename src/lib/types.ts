@@ -55,7 +55,7 @@ export const STATUS_COLORS: Record<LoanStatus, string> = {
   pending: '#f59e0b',
   in_process: '#ffffff',
   in_disbursement_process: '#60a5fa',
-  approved: '#2FFF00',
+  approved: '#22c55e',
   rejected: '#f87171',
 };
 
@@ -86,7 +86,7 @@ export const PAYMENT_STATUS_LABELS: Record<PaymentStatus, string> = {
 };
 
 export const PAYMENT_STATUS_COLORS: Record<PaymentStatus, string> = {
-  APPROVED: '#2FFF00',
+  APPROVED: '#22c55e',
   DECLINED: '#f87171',
   ERROR: '#f59e0b',
 };

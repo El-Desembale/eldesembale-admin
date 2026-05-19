@@ -33,7 +33,7 @@ const STATUS_CONFIG: Record<LoanStatus, { label: string; message: string; color:
   approved: {
     label: 'Aprobado',
     message: '¡Felicitaciones! Tu préstamo ha sido aprobado y desembolsado exitosamente. Recuerda estar al día con tus pagos.',
-    color: '#2FFF00',
+    color: '#22c55e',
     icon: '✅',
   },
   rejected: {
@@ -78,13 +78,13 @@ export async function POST(req: NextRequest) {
   const displayName = userName || 'Cliente';
 
   const html = `
-    <div style="font-family: Arial, sans-serif; max-width: 500px; margin: 0 auto; background: #0a1a0a; border-radius: 16px; padding: 32px; color: #ffffff;">
+    <div style="font-family: Arial, sans-serif; max-width: 500px; margin: 0 auto; background: #ffffff; border-radius: 16px; padding: 32px; color: #0f172a; border: 1px solid #e2e8f0;">
       <h2 style="color: ${config.color}; margin: 0 0 8px 0; font-size: 20px;">
         ${config.icon} Actualización de tu solicitud
       </h2>
       <p style="color: #9ca3af; margin: 0 0 24px 0; font-size: 13px;">Hola ${displayName}</p>
 
-      <div style="background: #061006; border-radius: 12px; padding: 20px; margin-bottom: 20px;">
+      <div style="background: #f8fafc; border-radius: 12px; padding: 20px; margin-bottom: 20px; border: 1px solid #e2e8f0;">
         <p style="color: #9ca3af; font-size: 13px; margin: 0 0 4px 0;">Estado actual</p>
         <p style="color: ${config.color}; font-size: 22px; font-weight: bold; margin: 0;">${config.label}</p>
       </div>
