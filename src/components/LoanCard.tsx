@@ -10,7 +10,7 @@ interface Props {
 
 function getNextInstallmentDate(loan: LoanRequest): Date | null {
   if (loan.status !== 'approved' || loan.installmentsPaid >= loan.installments) return null;
-  const base = new Date(loan.createdAt);
+  const base = loan.createdAt instanceof Date ? loan.createdAt : new Date(loan.createdAt);
   const i = loan.installmentsPaid;
   if (loan.paymentPeriod === 'Mensual') {
     return new Date(base.getFullYear(), base.getMonth() + 1 + i, base.getDate());

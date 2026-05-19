@@ -288,7 +288,7 @@ export default function LoanDetailPage() {
           <h2 className="text-slate-900 font-semibold mb-3">Cuotas ({loan.installmentsPaid}/{loan.installments} pagadas)</h2>
           <div className="grid gap-2">
             {Array.from({ length: loan.installments }, (_, i) => {
-              const base = new Date(loan.createdAt);
+              const base = loan.createdAt instanceof Date ? loan.createdAt : new Date(loan.createdAt);
               let dueDate: Date;
               if (loan.paymentPeriod === 'Mensual') {
                 dueDate = new Date(base.getFullYear(), base.getMonth() + 1 + i, base.getDate());
