@@ -283,7 +283,7 @@ export default function LoanDetailPage() {
       </button>
 
       {/* Installment schedule */}
-      {loan.status === 'approved' && loan.installments > 0 && (
+      {loan.installments > 0 && (
         <div className="bg-white border border-slate-200 rounded-2xl p-5 mb-4 shadow-sm">
           <h2 className="text-slate-900 font-semibold mb-3">Cuotas ({loan.installmentsPaid}/{loan.installments} pagadas)</h2>
           <div className="grid gap-2">
