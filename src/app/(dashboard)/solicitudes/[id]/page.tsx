@@ -117,6 +117,7 @@ export default function LoanDetailPage() {
             body: JSON.stringify({
               email: clientInfo.email,
               userName: clientInfo.name || '',
+              phone: loan.phone,
               loanId: loan.id,
               amount: loan.amount,
               newStatus: status,
