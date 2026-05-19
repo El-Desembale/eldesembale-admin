@@ -225,7 +225,7 @@ export default function LoanDetailPage() {
             <p className="text-slate-900">{loan.paymentPeriod}</p>
           </div>
           <div>
-            <p className="text-slate-400 text-xs">Fecha</p>
+            <p className="text-slate-400 text-xs">Fecha solicitud</p>
             <p className="text-slate-900">{date}</p>
           </div>
           <div>
@@ -233,6 +233,54 @@ export default function LoanDetailPage() {
             <p className="text-slate-900">{loan.isSubscribed ? 'Sí' : 'No'}</p>
           </div>
         </div>
+
+        {/* Installment dates inside main card */}
+        {loan.installments > 0 && (() => {
+          const base = loan.createdAt instanceof Date ? loan.createdAt : new Date(loan.createdAt);
+          const installmentAmount = ((loan.amount * loan.interest) - loan.amount + (loan.amount / loan.installments));
+          const isActive = loan.status === 'approved';
+          return (
+            <div className="mt-4 pt-4 border-t border-slate-100">
+              <p className="text-slate-400 text-xs mb-2">Fechas de pago</p>
+              <div className="grid gap-1.5">
+                {Array.from({ length: loan.installments }, (_, i) => {
+                  let dueDate: Date;
+                  if (loan.paymentPeriod === 'Mensual') {
+                    dueDate = new Date(base.getFullYear(), base.getMonth() + 1 + i, base.getDate());
+                  } else {
+                    const first = new Date(base.getFullYear(), base.getMonth() + 1, base.getDate());
+                    dueDate = new Date(first.getTime() + 15 * i * 24 * 60 * 60 * 1000);
+                  }
+                  const paid = isActive && i < loan.installmentsPaid;
+                  const isNext = isActive && i === loan.installmentsPaid;
+                  return (
+                    <div key={i} className={`flex items-center justify-between px-3 py-1.5 rounded-lg text-sm border ${
+                      paid ? 'bg-green-50 border-green-100' : isNext ? 'bg-blue-50 border-blue-200' : 'bg-slate-50 border-slate-100'
+                    }`}>
+                      <div className="flex items-center gap-2">
+                        {isActive && (
+                          <span className={paid ? 'text-green-500' : isNext ? 'text-blue-400' : 'text-slate-300'}>
+                            {paid ? '✓' : isNext ? '▶' : '○'}
+                          </span>
+                        )}
+                        <span className={paid ? 'text-slate-400' : 'text-slate-700'}>Cuota {i + 1}</span>
+                        {isNext && <span className="text-xs bg-blue-100 text-blue-600 px-1.5 py-0.5 rounded-full font-medium">Siguiente</span>}
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <span className="text-xs text-slate-500">
+                          {dueDate.toLocaleDateString('es-CO', { day: '2-digit', month: 'short', year: 'numeric' })}
+                        </span>
+                        <span className={`font-medium text-xs ${paid ? 'text-slate-400' : isNext ? 'text-blue-600' : 'text-slate-700'}`}>
+                          {new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 }).format(installmentAmount)}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })()}
       </div>
 
       {/* Bank info */}
@@ -281,60 +329,6 @@ export default function LoanDetailPage() {
         <span className="text-slate-900 font-semibold">Ver documentos</span>
         <span className="text-blue-600">→</span>
       </button>
-
-      {/* Installment schedule */}
-      {loan.installments > 0 && (
-        <div className="bg-white border border-slate-200 rounded-2xl p-5 mb-4 shadow-sm">
-          <h2 className="text-slate-900 font-semibold mb-3">Cuotas ({loan.installmentsPaid}/{loan.installments} pagadas)</h2>
-          <div className="grid gap-2">
-            {Array.from({ length: loan.installments }, (_, i) => {
-              const base = loan.createdAt instanceof Date ? loan.createdAt : new Date(loan.createdAt);
-              let dueDate: Date;
-              if (loan.paymentPeriod === 'Mensual') {
-                dueDate = new Date(base.getFullYear(), base.getMonth() + 1 + i, base.getDate());
-              } else {
-                const first = new Date(base.getFullYear(), base.getMonth() + 1, base.getDate());
-                dueDate = new Date(first.getTime() + 15 * i * 24 * 60 * 60 * 1000);
-              }
-              const paid = i < loan.installmentsPaid;
-              const isNext = i === loan.installmentsPaid;
-              const installmentAmount = loan.installments > 0
-                ? ((loan.amount * loan.interest) - loan.amount + (loan.amount / loan.installments))
-                : 0;
-              return (
-                <div
-                  key={i}
-                  className={`flex items-center justify-between px-3 py-2 rounded-xl text-sm border ${
-                    paid
-                      ? 'bg-green-50 border-green-100'
-                      : isNext
-                      ? 'bg-blue-50 border-blue-200'
-                      : 'bg-slate-50 border-slate-100'
-                  }`}
-                >
-                  <div className="flex items-center gap-2">
-                    <span className={`text-base ${paid ? 'text-green-500' : isNext ? 'text-blue-400' : 'text-slate-300'}`}>
-                      {paid ? '✓' : isNext ? '▶' : '○'}
-                    </span>
-                    <span className={paid ? 'text-slate-400' : 'text-slate-700'}>
-                      Cuota {i + 1}
-                    </span>
-                    {isNext && <span className="text-xs bg-blue-100 text-blue-600 px-1.5 py-0.5 rounded-full font-medium">Siguiente</span>}
-                  </div>
-                  <div className="flex items-center gap-3 text-right">
-                    <span className={`text-xs ${paid ? 'text-slate-400' : 'text-slate-500'}`}>
-                      {dueDate.toLocaleDateString('es-CO', { day: '2-digit', month: 'short', year: 'numeric' })}
-                    </span>
-                    <span className={`font-medium ${paid ? 'text-slate-400' : isNext ? 'text-blue-600' : 'text-slate-700'}`}>
-                      {new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 }).format(installmentAmount)}
-                    </span>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
 
       {/* Payment history */}
       <div className="bg-white border border-slate-200 rounded-2xl p-5 mb-4 shadow-sm">

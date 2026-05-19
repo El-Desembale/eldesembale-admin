@@ -7,12 +7,22 @@ interface NewLoanPayload {
   phone: string;
   installments: number;
   paymentPeriod: string;
+  interest?: number;
+  createdAt?: string;
   clientName?: string;
+}
+
+function calcInstallmentDate(base: Date, index: number, paymentPeriod: string): Date {
+  if (paymentPeriod === 'Mensual') {
+    return new Date(base.getFullYear(), base.getMonth() + 1 + index, base.getDate());
+  }
+  const first = new Date(base.getFullYear(), base.getMonth() + 1, base.getDate());
+  return new Date(first.getTime() + 15 * index * 24 * 60 * 60 * 1000);
 }
 
 export async function POST(req: NextRequest) {
   const body: NewLoanPayload = await req.json();
-  const { loanId, amount, phone, installments, paymentPeriod, clientName } = body;
+  const { loanId, amount, phone, installments, paymentPeriod, interest, createdAt, clientName } = body;
 
   const smtpUser = process.env.SMTP_USER;
   const smtpPass = process.env.SMTP_PASS;
@@ -37,8 +47,24 @@ export async function POST(req: NextRequest) {
   const clientDisplay = clientName ? `${clientName} (${phone})` : phone;
   const loanUrl = `https://eldesembale-admin.vercel.app/solicitudes/${loanId}`;
 
+  const base = createdAt ? new Date(createdAt) : new Date();
+  const installmentAmount = interest && installments > 0
+    ? ((amount * interest) - amount + (amount / installments))
+    : (installments > 0 ? amount / installments : 0);
+  const installmentAmountFmt = new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 }).format(installmentAmount);
+
+  const installmentRows = Array.from({ length: installments }, (_, i) => {
+    const d = calcInstallmentDate(base, i, paymentPeriod);
+    const dateStr = d.toLocaleDateString('es-CO', { day: '2-digit', month: 'short', year: 'numeric' });
+    return `<tr>
+      <td style="padding: 6px 8px; color: #64748b; font-size: 13px;">Cuota ${i + 1}</td>
+      <td style="padding: 6px 8px; color: #0f172a; font-size: 13px; text-align: center;">${dateStr}</td>
+      <td style="padding: 6px 8px; color: #2563eb; font-size: 13px; text-align: right; font-weight: bold;">${installmentAmountFmt}</td>
+    </tr>`;
+  }).join('');
+
   const html = `
-    <div style="font-family: Arial, sans-serif; max-width: 500px; margin: 0 auto; background: #ffffff; border-radius: 16px; padding: 32px; color: #0f172a; border: 1px solid #e2e8f0;">
+    <div style="font-family: Arial, sans-serif; max-width: 520px; margin: 0 auto; background: #ffffff; border-radius: 16px; padding: 32px; color: #0f172a; border: 1px solid #e2e8f0;">
       <h2 style="color: #2563eb; margin: 0 0 8px 0; font-size: 20px;">🔔 Nueva solicitud de préstamo</h2>
       <p style="color: #9ca3af; margin: 0 0 24px 0; font-size: 13px;">Se ha recibido una nueva solicitud</p>
       <div style="background: #f8fafc; border-radius: 12px; padding: 20px; margin-bottom: 20px; border: 1px solid #e2e8f0;">
@@ -52,18 +78,24 @@ export async function POST(req: NextRequest) {
         </tr>
         <tr>
           <td style="padding: 8px 0; color: #9ca3af; font-size: 13px;">Cuotas</td>
-          <td style="padding: 8px 0; color: #0f172a; font-size: 14px; text-align: right;">${installments} cuotas</td>
+          <td style="padding: 8px 0; color: #0f172a; font-size: 14px; text-align: right;">${installments} cuotas · ${paymentPeriod}</td>
         </tr>
         <tr>
-          <td style="padding: 8px 0; color: #9ca3af; font-size: 13px;">Período de pago</td>
-          <td style="padding: 8px 0; color: #0f172a; font-size: 14px; text-align: right;">${paymentPeriod}</td>
+          <td style="padding: 8px 0; color: #9ca3af; font-size: 13px;">Valor por cuota</td>
+          <td style="padding: 8px 0; color: #0f172a; font-size: 14px; text-align: right; font-weight: bold;">${installmentAmountFmt}</td>
         </tr>
         <tr>
           <td style="padding: 8px 0; color: #9ca3af; font-size: 13px;">No. solicitud</td>
           <td style="padding: 8px 0; color: #9ca3af; font-size: 12px; text-align: right;">${loanId.slice(0, 8)}...</td>
         </tr>
       </table>
-      <div style="margin-top: 24px; text-align: center;">
+      <div style="background: #f8fafc; border-radius: 12px; padding: 16px; margin-bottom: 20px; border: 1px solid #e2e8f0;">
+        <p style="color: #64748b; font-size: 12px; font-weight: bold; margin: 0 0 10px 0; text-transform: uppercase; letter-spacing: 0.05em;">Fechas de pago</p>
+        <table style="width: 100%; border-collapse: collapse;">
+          ${installmentRows}
+        </table>
+      </div>
+      <div style="text-align: center;">
         <a href="${loanUrl}" style="display: inline-block; background: #2563eb; color: #ffffff; padding: 12px 32px; border-radius: 24px; text-decoration: none; font-weight: bold; font-size: 14px;">
           Ver solicitud
         </a>
