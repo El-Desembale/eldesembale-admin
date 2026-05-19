@@ -42,8 +42,8 @@ const STATUS_CONFIG: Record<LoanStatus, { label: string; message: string; color:
     icon: '💸',
   },
   approved: {
-    label: 'Aprobado',
-    message: '¡Felicitaciones! Tu préstamo ha sido aprobado y desembolsado exitosamente. Recuerda estar al día con tus pagos.',
+    label: 'Activo',
+    message: '¡Felicitaciones! Tu préstamo ha sido desembolsado y ya está activo. Recuerda estar al día con tus pagos.',
     color: '#22c55e',
     icon: '✅',
   },

@@ -47,7 +47,7 @@ export const STATUS_LABELS: Record<LoanStatus, string> = {
   pending: 'Pendiente',
   in_process: 'En revisión',
   in_disbursement_process: 'En desembolso',
-  approved: 'Aprobado',
+  approved: 'Activo',
   rejected: 'Rechazado',
 };
 
