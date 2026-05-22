@@ -63,7 +63,7 @@ export default function ConfiguracionPage() {
             maxAmount: d.max_amount ?? 1000000,
             minInstallments: d.number_min_of_installments ?? 2,
             maxInstallments: d.number_max_of_installments ?? 8,
-            interest: d.interest ?? 10,
+            interest: d.interest != null ? Math.round((d.interest - 1) * 100) : 20,
             docId: loanDoc.id,
           });
         }
@@ -104,7 +104,7 @@ export default function ConfiguracionPage() {
         max_amount: Number(loanConfig.maxAmount),
         number_min_of_installments: Number(loanConfig.minInstallments),
         number_max_of_installments: Number(loanConfig.maxInstallments),
-        interest: Number(loanConfig.interest),
+        interest: 1 + Number(loanConfig.interest) / 100,
         updatedAt: new Date(),
       };
       if (loanConfig.docId) {
@@ -190,16 +190,20 @@ export default function ConfiguracionPage() {
           </div>
 
           <div>
-            <label className="block text-slate-700 text-sm font-medium mb-2">Interés (multiplicador)</label>
-            <input
-              type="number"
-              step="0.1"
-              min={1}
-              value={loanConfig.interest}
-              onChange={e => setLoanConfig(prev => ({ ...prev, interest: Number(e.target.value) }))}
-              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-slate-900 focus:outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400 transition-colors"
-            />
-            <p className="text-slate-400 text-xs mt-1">Valor actual: {loanConfig.interest}x (el cliente paga {loanConfig.interest}x el capital)</p>
+            <label className="block text-slate-700 text-sm font-medium mb-2">Interés (%)</label>
+            <div className="relative">
+              <input
+                type="number"
+                step="1"
+                min={0}
+                max={100}
+                value={loanConfig.interest}
+                onChange={e => setLoanConfig(prev => ({ ...prev, interest: Number(e.target.value) }))}
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 pr-10 text-slate-900 focus:outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400 transition-colors"
+              />
+              <span className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 font-medium">%</span>
+            </div>
+            <p className="text-slate-400 text-xs mt-1">El cliente paga {loanConfig.interest}% adicional sobre el capital prestado</p>
           </div>
 
           <button
