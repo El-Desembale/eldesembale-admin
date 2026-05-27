@@ -14,12 +14,19 @@ import { ReminderDialog } from '@/components/ReminderDialog';
 import { PaymentCard } from '@/components/PaymentCard';
 
 const ACTION_STATUSES: { label: string; value: LoanRequest['status']; color: string }[] = [
-  { label: 'Pendiente', value: 'pending', color: 'bg-yellow-50 text-yellow-700 border-yellow-200 hover:bg-yellow-100' },
-  { label: 'En revisión', value: 'in_process', color: 'bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100' },
-  { label: 'En desembolso', value: 'in_disbursement_process', color: 'bg-purple-50 text-purple-700 border-purple-200 hover:bg-purple-100' },
-  { label: 'Activar', value: 'approved', color: 'bg-green-50 text-green-700 border-green-200 hover:bg-green-100' },
-  { label: 'Rechazar', value: 'rejected', color: 'bg-red-50 text-red-700 border-red-200 hover:bg-red-100' },
+  { label: 'Pendiente', value: 'pending', color: 'bg-[#b79d66]/14 text-[#8e7335] border-[#d8c394] hover:bg-[#b79d66]/20' },
+  { label: 'En revision', value: 'in_process', color: 'bg-[#7d8fa4]/14 text-[#57687d] border-[#b4c1cf] hover:bg-[#7d8fa4]/20' },
+  { label: 'En desembolso', value: 'in_disbursement_process', color: 'bg-[#8f84b1]/14 text-[#665885] border-[#cbc3dd] hover:bg-[#8f84b1]/20' },
+  { label: 'Activar', value: 'approved', color: 'bg-[#7d977d]/16 text-[#4f684f] border-[#bad0ba] hover:bg-[#7d977d]/22' },
+  { label: 'Rechazar', value: 'rejected', color: 'bg-[#9d6764]/14 text-[#744846] border-[#d8b0ad] hover:bg-[#9d6764]/20' },
 ];
+
+const DOCUMENT_ITEMS = [
+  { key: 'ccFrontalPicture', label: 'Cedula frontal', helper: 'Documento principal' },
+  { key: 'ccBackPicture', label: 'Cedula respaldo', helper: 'Cara posterior del documento' },
+  { key: 'selfiePicture', label: 'Selfie', helper: 'Validacion facial del solicitante' },
+  { key: 'empInvoiceFile', label: 'Comprobante', helper: 'Factura o soporte laboral' },
+] as const;
 
 function parseLoanFromFirestore(id: string, data: Record<string, unknown>): LoanRequest {
   const createdAt = data.created_at instanceof Timestamp ? data.created_at.toDate() : new Date();
@@ -171,6 +178,10 @@ export default function LoanDetailPage() {
   const bank = loan.loanInformation.bankInformation;
   const mora = isInMora(loan);
   const daysOverdue = getDaysOverdue(loan);
+  const documents = DOCUMENT_ITEMS.map((item) => ({
+    ...item,
+    url: loan.loanInformation[item.key],
+  }));
 
   return (
     <div className="max-w-2xl">
@@ -326,13 +337,75 @@ export default function LoanDetailPage() {
       </div>
 
       {/* Documents */}
-      <button
-        onClick={() => setShowDocs(true)}
-        className="w-full bg-white border border-slate-200 rounded-2xl p-4 text-left hover:border-blue-300 hover:shadow-md transition-all mb-4 flex justify-between items-center shadow-sm"
-      >
-        <span className="text-slate-900 font-semibold">Ver documentos</span>
-        <span className="text-blue-600">→</span>
-      </button>
+      <div className="bg-white border border-slate-200 rounded-2xl p-5 mb-4 shadow-sm">
+        <div className="flex items-start justify-between gap-4 mb-4">
+          <div>
+            <h2 className="text-slate-900 font-semibold">Documentos del solicitante</h2>
+            <p className="text-slate-400 text-xs mt-1">
+              Revisa los soportes cargados antes de cambiar el estado de la solicitud.
+            </p>
+          </div>
+          <button
+            onClick={() => setShowDocs(true)}
+            className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 transition hover:border-[#7d977d] hover:bg-[#7d977d]/10"
+          >
+            Abrir visor
+          </button>
+        </div>
+
+        <div className="grid gap-3 sm:grid-cols-2">
+          {documents.map((document) => {
+            const available = Boolean(document.url);
+            return (
+              <div
+                key={document.key}
+                className="rounded-2xl border border-slate-200 bg-slate-50/60 p-4"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-semibold text-slate-900">{document.label}</p>
+                    <p className="mt-1 text-xs text-slate-500">{document.helper}</p>
+                  </div>
+                  <span
+                    className={`inline-flex rounded-full px-2.5 py-1 text-[11px] font-semibold ${
+                      available
+                        ? 'bg-[#7d977d]/14 text-[#537053]'
+                        : 'bg-slate-200 text-slate-500'
+                    }`}
+                  >
+                    {available ? 'Cargado' : 'Pendiente'}
+                  </span>
+                </div>
+
+                <div className="mt-4 flex items-center gap-2">
+                  {available ? (
+                    <>
+                      <a
+                        href={document.url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-700 transition hover:border-[#7d977d] hover:bg-[#7d977d]/10"
+                      >
+                        Ver archivo
+                      </a>
+                      <button
+                        onClick={() => setShowDocs(true)}
+                        className="inline-flex items-center rounded-xl px-3 py-2 text-xs font-medium text-slate-500 transition hover:bg-slate-200"
+                      >
+                        Ver en visor
+                      </button>
+                    </>
+                  ) : (
+                    <p className="text-xs text-slate-400">
+                      El cliente no subio este soporte en la solicitud.
+                    </p>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
 
       {/* Payment history */}
       <div className="bg-white border border-slate-200 rounded-2xl p-5 mb-4 shadow-sm">
