@@ -5,6 +5,7 @@ import { useMemo, useState } from 'react';
 import { useUsers } from '@/hooks/useUsers';
 import { usePayments } from '@/hooks/usePayments';
 import { useLoans } from '@/hooks/useLoans';
+import { deleteUser } from '@/lib/firestore';
 
 type Filter = 'all' | 'subscribed' | 'not_subscribed' | 'admins';
 type SortOption = 'recent' | 'name' | 'subscriptions' | 'loans';
@@ -46,12 +47,26 @@ function SummaryCard({
 }
 
 export default function UsuariosPage() {
-  const { users, loading, error } = useUsers();
+  const { users, loading, error, refetch } = useUsers();
   const { payments, loading: loadingPayments } = usePayments();
   const { loans, loading: loadingLoans } = useLoans();
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<Filter>('all');
   const [sortBy, setSortBy] = useState<SortOption>('recent');
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  const handleDeleteUser = async (e: React.MouseEvent, userId: string, userPhone: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!confirm('¿Eliminar este usuario y todos sus datos (solicitudes, pagos, documentos)? Esta acción no se puede deshacer.')) return;
+    setDeletingId(userId);
+    try {
+      await deleteUser(userId, userPhone);
+      refetch();
+    } finally {
+      setDeletingId(null);
+    }
+  };
 
   const subscriptionByPhone = useMemo(() => {
     const latest: Record<string, { amount: number; date: Date }> = {};
@@ -335,10 +350,18 @@ export default function UsuariosPage() {
                           )}
                         </div>
 
-                        <div className="flex justify-end">
+                        <div className="flex items-center justify-end gap-2">
                           <span className="inline-flex items-center rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-[12px] font-medium text-slate-700 transition hover:border-blue-300 hover:bg-slate-50">
                             Ver
                           </span>
+                          <button
+                            onClick={(e) => handleDeleteUser(e, user.id, user.phone)}
+                            disabled={deletingId === user.id}
+                            className="inline-flex items-center rounded-xl border border-rose-200 bg-rose-50 px-2.5 py-1.5 text-[12px] font-medium text-rose-600 transition hover:bg-rose-100 disabled:opacity-50"
+                            title="Eliminar usuario"
+                          >
+                            {deletingId === user.id ? '...' : '✕'}
+                          </button>
                         </div>
                       </div>
                     </div>

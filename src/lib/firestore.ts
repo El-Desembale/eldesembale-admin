@@ -7,8 +7,10 @@ import {
   query,
   orderBy,
   Timestamp,
+  where,
 } from 'firebase/firestore';
-import { db } from './firebase';
+import { ref, deleteObject } from 'firebase/storage';
+import { db, storage } from './firebase';
 import { LoanRequest, User, Payment } from './types';
 
 function parseLoanInformation(raw: Record<string, unknown>) {
@@ -97,6 +99,42 @@ export async function updateUserPassword(userId: string, newPassword: string): P
 
 export async function updateUserSubscription(userId: string, isSubscribed: boolean): Promise<void> {
   await updateDoc(doc(db, 'users', userId), { isSubscribed });
+}
+
+export async function deleteUser(userId: string, userPhone: string): Promise<void> {
+  // 1. Loans del usuario
+  const loans = await getUserLoans(userPhone);
+
+  // 2. Recopilar URLs de Storage de los documentos del loan
+  const storageUrls: string[] = [];
+  for (const loan of loans) {
+    const info = loan.loanInformation;
+    [info.ccFrontalPicture, info.ccBackPicture, info.selfiePicture, info.empInvoiceFile]
+      .filter(Boolean)
+      .forEach(url => storageUrls.push(url as string));
+  }
+
+  // 3. Eliminar solicitudes
+  await Promise.all(loans.map(l => deleteDoc(doc(db, 'loan_request', l.id))));
+
+  // 4. Eliminar pagos
+  const allPayments = await getPayments();
+  const userPayments = allPayments.filter(p => p.userPhone === userPhone);
+  await Promise.all(userPayments.map(p => deleteDoc(doc(db, 'payments', p.id))));
+
+  // 5. Eliminar archivos de Storage (best-effort)
+  await Promise.allSettled(
+    storageUrls.map(url => deleteObject(ref(storage, url)).catch(() => null))
+  );
+
+  // 6. Eliminar OTP codes por teléfono/email (best-effort)
+  try {
+    const otpSnap = await getDocs(query(collection(db, 'otp_codes'), where('phone', '==', userPhone)));
+    await Promise.all(otpSnap.docs.map(d => deleteDoc(d.ref)));
+  } catch { /* colección puede no existir */ }
+
+  // 7. Eliminar documento del usuario
+  await deleteDoc(doc(db, 'users', userId));
 }
 
 // Payments

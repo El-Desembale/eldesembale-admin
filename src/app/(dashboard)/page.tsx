@@ -5,6 +5,7 @@ import { useMemo, useState } from 'react';
 import { useLoans } from '@/hooks/useLoans';
 import { useUsers } from '@/hooks/useUsers';
 import { isInMora } from '@/lib/mora';
+import { deleteLoanRequest } from '@/lib/firestore';
 import { LoanRequest, STATUS_LABELS } from '@/lib/types';
 
 const STATUS_FILTERS: { label: string; value: LoanRequest['status'] | 'all' | 'mora' }[] = [
@@ -122,6 +123,20 @@ export default function HomePage() {
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
   const [sortBy, setSortBy] = useState<SortOption>('recent');
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  const handleDeleteLoan = async (e: React.MouseEvent, loanId: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!confirm('¿Eliminar esta solicitud? Esta acción no se puede deshacer.')) return;
+    setDeletingId(loanId);
+    try {
+      await deleteLoanRequest(loanId);
+      refetch();
+    } finally {
+      setDeletingId(null);
+    }
+  };
 
   const usersByPhone = useMemo(() => {
     const map: Record<string, { name: string; email: string }> = {};
@@ -418,10 +433,18 @@ export default function HomePage() {
                           <StatusPill status={loan.status} inMora={inMora} />
                         </div>
 
-                        <div className="flex justify-end">
+                        <div className="flex items-center justify-end gap-2">
                           <span className="inline-flex items-center rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-[12px] font-medium text-slate-700 transition hover:border-blue-300 hover:bg-slate-50">
                             Ver
                           </span>
+                          <button
+                            onClick={(e) => handleDeleteLoan(e, loan.id)}
+                            disabled={deletingId === loan.id}
+                            className="inline-flex items-center rounded-xl border border-rose-200 bg-rose-50 px-2.5 py-1.5 text-[12px] font-medium text-rose-600 transition hover:bg-rose-100 disabled:opacity-50"
+                            title="Eliminar solicitud"
+                          >
+                            {deletingId === loan.id ? '...' : '✕'}
+                          </button>
                         </div>
                       </div>
                     </div>

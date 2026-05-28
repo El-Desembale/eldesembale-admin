@@ -9,20 +9,19 @@ export function useUsers() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    const fetchUsers = async () => {
-      try {
-        const data = await getUsers();
-        setUsers(data);
-      } catch (e) {
-        setError('Error cargando usuarios');
-        console.error(e);
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchUsers();
-  }, []);
+  const fetchUsers = async () => {
+    try {
+      const data = await getUsers();
+      setUsers(data);
+    } catch (e) {
+      setError('Error cargando usuarios');
+      console.error(e);
+    } finally {
+      setLoading(false);
+    }
+  };
 
-  return { users, loading, error };
+  useEffect(() => { fetchUsers(); }, []);
+
+  return { users, loading, error, refetch: fetchUsers };
 }

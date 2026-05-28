@@ -5,7 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { doc, getDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-import { getUserLoans, getPaymentsByPhone, getUserPassword, updateUserPassword, updateUserSubscription } from '@/lib/firestore';
+import { getUserLoans, getPaymentsByPhone, getUserPassword, updateUserPassword, updateUserSubscription, deleteUser } from '@/lib/firestore';
 import { User, UserDocuments, LoanRequest, Payment } from '@/lib/types';
 import { LoanCard } from '@/components/LoanCard';
 import { PaymentCard } from '@/components/PaymentCard';
@@ -34,6 +34,7 @@ export default function UserDetailPage() {
   const [savingSubscription, setSavingSubscription] = useState(false);
   const [subscriptionMsg, setSubscriptionMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [showDocs, setShowDocs] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -149,14 +150,34 @@ export default function UserDetailPage() {
     }
   };
 
+  const handleDeleteUser = async () => {
+    if (!user) return;
+    if (!confirm(`¿Eliminar a ${user.name} ${user.lastName} y todos sus datos (solicitudes, pagos, documentos)? Esta acción no se puede deshacer.`)) return;
+    setDeleting(true);
+    try {
+      await deleteUser(user.id, user.phone);
+      router.replace('/usuarios');
+    } catch {
+      alert('Error al eliminar el usuario');
+      setDeleting(false);
+    }
+  };
+
   if (!user) return null;
 
   return (
     <div>
-      <div className="flex items-center gap-3 mb-6">
+      <div className="flex items-center justify-between mb-6">
         <Link href="/usuarios" className="text-slate-500 hover:text-blue-600 transition-colors text-sm font-medium">
           ← Usuarios
         </Link>
+        <button
+          onClick={handleDeleteUser}
+          disabled={deleting}
+          className="inline-flex items-center gap-2 rounded-xl border border-rose-200 bg-rose-50 px-4 py-2 text-sm font-medium text-rose-600 transition hover:bg-rose-100 disabled:opacity-50"
+        >
+          {deleting ? 'Eliminando...' : '✕ Eliminar usuario'}
+        </button>
       </div>
 
       {/* User info */}
