@@ -3,6 +3,7 @@ import {
   getDocs,
   doc,
   updateDoc,
+  deleteDoc,
   query,
   orderBy,
   Timestamp,
@@ -61,6 +62,10 @@ export async function updateLoanStatus(loanId: string, status: LoanRequest['stat
   await updateDoc(doc(db, 'loan_request', loanId), { status });
 }
 
+export async function deleteLoanRequest(loanId: string): Promise<void> {
+  await deleteDoc(doc(db, 'loan_request', loanId));
+}
+
 export async function getUsers(): Promise<User[]> {
   const q = query(collection(db, 'users'), orderBy('createdAt', 'desc'));
   const snapshot = await getDocs(q);
@@ -106,7 +111,7 @@ function parsePayment(docId: string, data: Record<string, unknown>): Payment {
     reference: (data.reference as string) || '',
     type: (data.type as Payment['type']) || 'subscription',
     status: (data.status as Payment['status']) || 'ERROR',
-    amount: (data.amount_in_cents as number) ? (data.amount_in_cents as number) / 100 : 0,
+    amount: (data.amount_in_cents as number) ? (data.amount_in_cents as number) / 100 : ((data.amount as number) || 0),
     amountInCents: (data.amount_in_cents as number) || 0,
     currency: (data.currency as string) || 'COP',
     userPhone: (data.user_phone as string) || '',

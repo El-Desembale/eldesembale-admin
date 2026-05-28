@@ -68,7 +68,9 @@ export default function PagosPage() {
     const interestEarned = installmentCollected - capitalRecovered;
     const pendingToCollect = totalToCollect - installmentCollected;
     const subscribedCount = users.filter(u => u.isSubscribed).length;
-    const subscriptionRevenue = subscribedCount * 22000;
+    const subscriptionRevenue = payments
+      .filter(p => p.type === 'subscription' && p.status === 'APPROVED')
+      .reduce((sum, p) => sum + p.amount, 0);
     const totalCollected = installmentCollected + subscriptionRevenue;
     const netProfit = interestEarned + subscriptionRevenue;
     const moraLoans = approvedLoans.filter(isInMora);
@@ -88,7 +90,7 @@ export default function PagosPage() {
       totalCollected, netProfit, moraCount, capitalAtRisk,
       approvedLoansCount: approvedLoans.length, completedLoans,
     };
-  }, [loans, users]);
+  }, [loans, users, payments]);
 
   const subscribedUsers = useMemo(() => {
     const subPaymentsByPhone: Record<string, Payment> = {};
@@ -106,7 +108,7 @@ export default function PagosPage() {
         return {
           user: u,
           name: [u.name, u.lastName].filter(Boolean).join(' ') || u.phone,
-          amount: payment?.amount || 22000,
+          amount: payment?.amount ?? 0,
           date: payment?.createdAt || null,
           hasPaymentRecord: !!payment,
         };
@@ -377,7 +379,7 @@ function FinancialOverview({ finance, totalCapital, onSaveBudget }: { finance: F
         <h3 className="text-slate-700 font-semibold mb-3 text-xs uppercase tracking-wider">Suscripciones</h3>
         <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
           <MetricCard label="Usuarios suscritos" value={String(finance.subscribedCount)} color="text-blue-600" />
-          <MetricCard label="Ingreso por suscripciones" value={formatCOP(finance.subscriptionRevenue)} sublabel="$22,000 c/u" color="text-blue-600" />
+          <MetricCard label="Ingreso por suscripciones" value={formatCOP(finance.subscriptionRevenue)} sublabel="Suma de pagos reales" color="text-blue-600" />
           <MetricCard label="Ingreso total" value={formatCOP(finance.totalCollected)} sublabel="Cuotas + suscripciones" color="text-slate-900" />
         </div>
       </div>
@@ -583,7 +585,11 @@ function SubscriptionsView({ items }: { items: SubscribedItem[] }) {
               </div>
             </div>
             <div className="text-right">
-              <p className="text-blue-600 font-semibold">{formatCOP(item.amount)}</p>
+              {item.amount > 0 ? (
+                <p className="text-blue-600 font-semibold">{formatCOP(item.amount)}</p>
+              ) : (
+                <p className="text-slate-400 font-medium text-sm">Sin monto</p>
+              )}
               {item.date ? (
                 <p className="text-slate-400 text-xs">{formatDate(item.date)}</p>
               ) : (

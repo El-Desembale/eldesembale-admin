@@ -54,13 +54,18 @@ export default function UsuariosPage() {
   const [sortBy, setSortBy] = useState<SortOption>('recent');
 
   const subscriptionByPhone = useMemo(() => {
-    const map: Record<string, number> = {};
+    const latest: Record<string, { amount: number; date: Date }> = {};
     for (const payment of payments) {
       if (payment.type === 'subscription' && payment.status === 'APPROVED') {
-        if (!map[payment.userPhone] || payment.amount > map[payment.userPhone]) {
-          map[payment.userPhone] = payment.amount;
+        const prev = latest[payment.userPhone];
+        if (!prev || payment.createdAt > prev.date) {
+          latest[payment.userPhone] = { amount: payment.amount, date: payment.createdAt };
         }
       }
+    }
+    const map: Record<string, number> = {};
+    for (const [phone, entry] of Object.entries(latest)) {
+      map[phone] = entry.amount;
     }
     return map;
   }, [payments]);
@@ -296,13 +301,15 @@ export default function UsuariosPage() {
                               <span className="inline-flex rounded-full bg-blue-50 px-2.5 py-1 text-[11px] font-semibold text-blue-700 ring-1 ring-blue-200">
                                 Suscrito
                               </span>
-                              <p className="mt-1.5 truncate text-[13px] font-medium text-slate-900">
-                                {formatCOP(
-                                  subscriptionAmount && subscriptionAmount > 0
-                                    ? subscriptionAmount
-                                    : 22000,
-                                )}
-                              </p>
+                              {subscriptionAmount && subscriptionAmount > 0 ? (
+                                <p className="mt-1.5 truncate text-[13px] font-medium text-slate-900">
+                                  {formatCOP(subscriptionAmount)}
+                                </p>
+                              ) : (
+                                <p className="mt-1.5 truncate text-[11px] text-slate-400">
+                                  Sin pago registrado
+                                </p>
+                              )}
                             </>
                           ) : (
                             <span className="inline-flex rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-semibold text-slate-600 ring-1 ring-slate-200">

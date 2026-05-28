@@ -6,9 +6,17 @@ import Link from 'next/link';
 import { doc, getDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { getUserLoans, getPaymentsByPhone, getUserPassword, updateUserPassword, updateUserSubscription } from '@/lib/firestore';
-import { User, LoanRequest, Payment } from '@/lib/types';
+import { User, UserDocuments, LoanRequest, Payment } from '@/lib/types';
 import { LoanCard } from '@/components/LoanCard';
 import { PaymentCard } from '@/components/PaymentCard';
+import { LoanDocumentsDialog } from '@/components/LoanDocumentsDialog';
+
+const DOCUMENT_ITEMS: { key: keyof UserDocuments; label: string; helper: string }[] = [
+  { key: 'ccFrontalPicture', label: 'Cédula frontal', helper: 'Documento principal' },
+  { key: 'ccBackPicture', label: 'Cédula respaldo', helper: 'Cara posterior del documento' },
+  { key: 'selfiePicture', label: 'Selfie', helper: 'Validación facial del solicitante' },
+  { key: 'empInvoiceFile', label: 'Comprobante', helper: 'Factura o soporte laboral' },
+];
 
 export default function UserDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -25,6 +33,7 @@ export default function UserDetailPage() {
   const [passwordMsg, setPasswordMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [savingSubscription, setSavingSubscription] = useState(false);
   const [subscriptionMsg, setSubscriptionMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [showDocs, setShowDocs] = useState(false);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -35,6 +44,7 @@ export default function UserDetailPage() {
           return;
         }
         const data = userDoc.data() as Record<string, unknown>;
+        const rawDocs = (data.documents as Record<string, string>) || {};
         const userData: User = {
           id: userDoc.id,
           email: (data.email as string) || '',
@@ -43,6 +53,12 @@ export default function UserDetailPage() {
           lastName: (data.lastName as string) || '',
           isSubscribed: (data.isSubscribed as boolean) || false,
           admin: (data.admin as boolean) || false,
+          documents: Object.keys(rawDocs).length > 0 ? {
+            ccFrontalPicture: rawDocs.ccFrontalPicture || '',
+            ccBackPicture: rawDocs.ccBackPicture || '',
+            selfiePicture: rawDocs.selfiePicture || '',
+            empInvoiceFile: rawDocs.empInvoiceFile || '',
+          } : undefined,
         };
         setUser(userData);
 
@@ -56,6 +72,27 @@ export default function UserDetailPage() {
           ]);
           setLoans(userLoans);
           setPayments(userPayments);
+
+          // If user has no documents in their profile, pull from most recent loan
+          if (!userData.documents) {
+            const loanWithDocs = userLoans.find(l =>
+              l.loanInformation.ccFrontalPicture ||
+              l.loanInformation.ccBackPicture ||
+              l.loanInformation.selfiePicture ||
+              l.loanInformation.empInvoiceFile
+            );
+            if (loanWithDocs) {
+              setUser(prev => prev ? {
+                ...prev,
+                documents: {
+                  ccFrontalPicture: loanWithDocs.loanInformation.ccFrontalPicture,
+                  ccBackPicture: loanWithDocs.loanInformation.ccBackPicture,
+                  selfiePicture: loanWithDocs.loanInformation.selfiePicture,
+                  empInvoiceFile: loanWithDocs.loanInformation.empInvoiceFile,
+                },
+              } : prev);
+            }
+          }
         }
       } catch (e) {
         console.error(e);
@@ -257,6 +294,75 @@ export default function UserDetailPage() {
         )}
       </div>
 
+      {/* Documents */}
+      <div className="bg-white border border-slate-200 rounded-2xl p-5 mb-6 shadow-sm">
+        <div className="flex items-start justify-between gap-4 mb-4">
+          <div>
+            <h2 className="text-slate-900 font-semibold">Documentos del cliente</h2>
+            <p className="text-slate-400 text-xs mt-1">
+              {user.documents ? 'Cargados al enviar la última solicitud.' : 'Sin documentos aún. Se cargarán cuando el cliente envíe su primera solicitud.'}
+            </p>
+          </div>
+          {user.documents && (
+            <button
+              onClick={() => setShowDocs(true)}
+              className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 transition hover:border-[#7d977d] hover:bg-[#7d977d]/10"
+            >
+              Abrir visor
+            </button>
+          )}
+        </div>
+
+        {user.documents ? (
+          <div className="grid gap-3 sm:grid-cols-2">
+            {DOCUMENT_ITEMS.map(item => {
+              const url = user.documents?.[item.key];
+              return (
+                <div key={item.key} className="rounded-2xl border border-slate-200 bg-slate-50/60 p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-semibold text-slate-900">{item.label}</p>
+                      <p className="mt-1 text-xs text-slate-500">{item.helper}</p>
+                    </div>
+                    <span className={`inline-flex rounded-full px-2.5 py-1 text-[11px] font-semibold ${url ? 'bg-[#7d977d]/14 text-[#537053]' : 'bg-slate-200 text-slate-500'}`}>
+                      {url ? 'Cargado' : 'Pendiente'}
+                    </span>
+                  </div>
+                  {url && (
+                    <div className="mt-4">
+                      <a
+                        href={url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-700 transition hover:border-[#7d977d] hover:bg-[#7d977d]/10"
+                      >
+                        Ver archivo
+                      </a>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="grid gap-3 sm:grid-cols-2">
+            {DOCUMENT_ITEMS.map(item => (
+              <div key={item.key} className="rounded-2xl border border-slate-200 bg-slate-50/60 p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-semibold text-slate-900">{item.label}</p>
+                    <p className="mt-1 text-xs text-slate-500">{item.helper}</p>
+                  </div>
+                  <span className="inline-flex rounded-full px-2.5 py-1 text-[11px] font-semibold bg-slate-200 text-slate-500">
+                    Pendiente
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
       {/* User loans */}
       <h2 className="text-slate-900 font-bold text-lg mb-3">
         Solicitudes ({loans.length})
@@ -282,6 +388,22 @@ export default function UserDetailPage() {
             <PaymentCard key={payment.id} payment={payment} />
           ))}
         </div>
+      )}
+
+      {showDocs && user.documents && (
+        <LoanDocumentsDialog
+          loanInfo={{
+            ccFrontalPicture: user.documents.ccFrontalPicture || '',
+            ccBackPicture: user.documents.ccBackPicture || '',
+            selfiePicture: user.documents.selfiePicture || '',
+            empInvoiceFile: user.documents.empInvoiceFile || '',
+            firstReference: { phone: '', relationship: '' },
+            secondReference: { phone: '', relationship: '' },
+            bankInformation: {},
+            direction: '',
+          }}
+          onClose={() => setShowDocs(false)}
+        />
       )}
     </div>
   );

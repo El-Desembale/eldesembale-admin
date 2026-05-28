@@ -1,7 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  serverExternalPackages: ['firebase-admin', '@grpc/grpc-js', 'google-gax'],
 };
 
 export default nextConfig;

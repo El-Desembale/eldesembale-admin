@@ -5,7 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { doc, getDoc, query, collection, where, getDocs, Timestamp } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-import { updateLoanStatus, getPaymentsByLoanId, getBudgetConfig, getLoans } from '@/lib/firestore';
+import { updateLoanStatus, deleteLoanRequest, getPaymentsByLoanId, getBudgetConfig, getLoans } from '@/lib/firestore';
 import { LoanRequest, Payment } from '@/lib/types';
 import { isInMora, getDaysOverdue } from '@/lib/mora';
 import { StatusBadge } from '@/components/StatusBadge';
@@ -15,10 +15,9 @@ import { PaymentCard } from '@/components/PaymentCard';
 
 const ACTION_STATUSES: { label: string; value: LoanRequest['status']; color: string }[] = [
   { label: 'Pendiente', value: 'pending', color: 'bg-[#b79d66]/14 text-[#8e7335] border-[#d8c394] hover:bg-[#b79d66]/20' },
-  { label: 'En revision', value: 'in_process', color: 'bg-[#7d8fa4]/14 text-[#57687d] border-[#b4c1cf] hover:bg-[#7d8fa4]/20' },
-  { label: 'En desembolso', value: 'in_disbursement_process', color: 'bg-[#8f84b1]/14 text-[#665885] border-[#cbc3dd] hover:bg-[#8f84b1]/20' },
-  { label: 'Activar', value: 'approved', color: 'bg-[#7d977d]/16 text-[#4f684f] border-[#bad0ba] hover:bg-[#7d977d]/22' },
+  { label: 'Aprobar', value: 'approved', color: 'bg-[#7d8fa4]/14 text-[#57687d] border-[#b4c1cf] hover:bg-[#7d8fa4]/20' },
   { label: 'Rechazar', value: 'rejected', color: 'bg-[#9d6764]/14 text-[#744846] border-[#d8b0ad] hover:bg-[#9d6764]/20' },
+  { label: 'Desembolsar', value: 'disbursed', color: 'bg-[#7d977d]/16 text-[#4f684f] border-[#bad0ba] hover:bg-[#7d977d]/22' },
 ];
 
 const DOCUMENT_ITEMS = [
@@ -63,7 +62,8 @@ export default function LoanDetailPage() {
   const [showDocs, setShowDocs] = useState(false);
   const [showReminder, setShowReminder] = useState(false);
   const [updating, setUpdating] = useState(false);
-  const [clientInfo, setClientInfo] = useState<{ name: string; email?: string } | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [clientInfo, setClientInfo] = useState<{ name: string; email?: string; isSubscribed?: boolean } | null>(null);
   const [payments, setPayments] = useState<Payment[]>([]);
   const [availableFunds, setAvailableFunds] = useState<number | null>(null);
 
@@ -87,12 +87,13 @@ export default function LoanDetailPage() {
             setClientInfo({
               name: [(u.name as string) || '', (u.lastName as string) || ''].filter(Boolean).join(' '),
               email: (u.email as string) || undefined,
+              isSubscribed: (u.isSubscribed as boolean) || false,
             });
           }
         }
         const [budgetConfig, allLoans] = await Promise.all([getBudgetConfig(), getLoans()]);
         if (budgetConfig && budgetConfig.totalCapital > 0) {
-          const approvedLoans = allLoans.filter(l => l.status === 'approved');
+          const approvedLoans = allLoans.filter(l => l.status === 'disbursed');
           const capitalLent = approvedLoans.reduce((sum, l) => sum + l.amount, 0);
           const capitalRecovered = approvedLoans.reduce((sum, l) => {
             if (l.installments <= 0) return sum;
@@ -153,6 +154,19 @@ export default function LoanDetailPage() {
     }
   };
 
+  const handleDelete = async () => {
+    if (!loan || deleting) return;
+    if (!confirm('¿Eliminar esta solicitud? Esta acción no se puede deshacer.')) return;
+    setDeleting(true);
+    try {
+      await deleteLoanRequest(loan.id);
+      router.replace('/');
+    } catch (e) {
+      console.error(e);
+      setDeleting(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex justify-center py-16">
@@ -189,14 +203,23 @@ export default function LoanDetailPage() {
         <Link href="/" className="text-slate-500 hover:text-blue-600 transition-colors text-sm font-medium">
           ← Solicitudes
         </Link>
-        {mora && (
+        <div className="flex items-center gap-2">
+          {mora && (
+            <button
+              onClick={() => setShowReminder(true)}
+              className="flex items-center gap-2 bg-orange-50 border border-orange-200 text-orange-600 px-4 py-2 rounded-xl text-sm font-medium hover:bg-orange-100 transition-colors"
+            >
+              <span>📩</span> Enviar recordatorio
+            </button>
+          )}
           <button
-            onClick={() => setShowReminder(true)}
-            className="flex items-center gap-2 bg-orange-50 border border-orange-200 text-orange-600 px-4 py-2 rounded-xl text-sm font-medium hover:bg-orange-100 transition-colors"
+            onClick={handleDelete}
+            disabled={deleting}
+            className="flex items-center gap-1.5 bg-rose-50 border border-rose-200 text-rose-600 px-4 py-2 rounded-xl text-sm font-medium hover:bg-rose-100 transition-colors disabled:opacity-50"
           >
-            <span>📩</span> Enviar recordatorio
+            {deleting ? 'Eliminando...' : 'Eliminar solicitud'}
           </button>
-        )}
+        </div>
       </div>
 
       {/* Mora banner */}
@@ -245,7 +268,7 @@ export default function LoanDetailPage() {
           </div>
           <div>
             <p className="text-slate-400 text-xs">Suscrito</p>
-            <p className="text-slate-900">{loan.isSubscribed ? 'Sí' : 'No'}</p>
+            <p className="text-slate-900">{(clientInfo?.isSubscribed ?? loan.isSubscribed) ? 'Sí' : 'No'}</p>
           </div>
         </div>
 
@@ -253,7 +276,7 @@ export default function LoanDetailPage() {
         {loan.installments > 0 && (() => {
           const base = loan.createdAt instanceof Date ? loan.createdAt : new Date(loan.createdAt);
           const installmentAmount = ((loan.amount * loan.interest) - loan.amount + (loan.amount / loan.installments));
-          const isActive = loan.status === 'approved';
+          const isActive = loan.status === 'disbursed';
           return (
             <div className="mt-4 pt-4 border-t border-slate-100">
               <p className="text-slate-400 text-xs mb-2">Fechas de pago</p>
@@ -422,7 +445,7 @@ export default function LoanDetailPage() {
       </div>
 
       {/* Insufficient funds warning */}
-      {availableFunds !== null && availableFunds < loan.amount && loan.status !== 'approved' && (
+      {availableFunds !== null && availableFunds < loan.amount && loan.status !== 'disbursed' && (
         <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 mb-4">
           <p className="text-red-600 font-semibold text-sm">Fondos insuficientes</p>
           <p className="text-red-500/70 text-xs mt-0.5">
@@ -436,7 +459,7 @@ export default function LoanDetailPage() {
         <h2 className="text-slate-900 font-semibold mb-3">Cambiar estado</h2>
         <div className="flex flex-wrap gap-2">
           {ACTION_STATUSES.map(action => {
-            const insufficientFunds = action.value === 'approved' && availableFunds !== null && availableFunds < loan.amount;
+            const insufficientFunds = action.value === 'disbursed' && availableFunds !== null && availableFunds < loan.amount;
             return (
               <button
                 key={action.value}

@@ -1,17 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import nodemailer from 'nodemailer';
-import { initializeApp, getApps, cert, App } from 'firebase-admin/app';
-import { getFirestore } from 'firebase-admin/firestore';
-import { getMessaging } from 'firebase-admin/messaging';
 
-function getAdminApp(): App {
-  if (getApps().length) return getApps()[0];
-  const raw = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
-  if (!raw) throw new Error('FIREBASE_SERVICE_ACCOUNT_JSON not set');
-  return initializeApp({ credential: cert(JSON.parse(raw)) });
-}
-
-type LoanStatus = 'pending' | 'approved' | 'rejected' | 'in_process' | 'in_disbursement_process';
+type LoanStatus = 'pending' | 'approved' | 'rejected' | 'disbursed';
 
 interface StatusChangePayload {
   email: string;
@@ -41,29 +31,23 @@ const STATUS_CONFIG: Record<LoanStatus, { label: string; message: string; color:
     color: '#f59e0b',
     icon: '⏳',
   },
-  in_process: {
-    label: 'En revisión',
-    message: 'Tu solicitud está siendo revisada por nuestro equipo. Te notificaremos cuando haya una actualización.',
-    color: '#3b82f6',
-    icon: '🔍',
-  },
-  in_disbursement_process: {
-    label: 'En proceso de desembolso',
-    message: '¡Buenas noticias! Tu préstamo ha sido aprobado y estamos procesando el desembolso. Pronto recibirás el dinero.',
-    color: '#8b5cf6',
-    icon: '💸',
-  },
   approved: {
-    label: 'Activo',
-    message: '¡Felicitaciones! Tu préstamo ha sido desembolsado y ya está activo. Recuerda estar al día con tus pagos.',
-    color: '#22c55e',
+    label: 'Aprobada',
+    message: '¡Buenas noticias! Tu solicitud ha sido aprobada y está en espera de ser desembolsada. Pronto recibirás el dinero.',
+    color: '#60a5fa',
     icon: '✅',
   },
   rejected: {
-    label: 'Rechazado',
+    label: 'Rechazada',
     message: 'Lamentamos informarte que tu solicitud de préstamo no fue aprobada en esta oportunidad. Puedes intentar nuevamente más adelante.',
     color: '#ef4444',
     icon: '❌',
+  },
+  disbursed: {
+    label: 'Desembolsada',
+    message: '¡Felicitaciones! Tu préstamo ha sido desembolsado. Recuerda estar al día con tus pagos.',
+    color: '#22c55e',
+    icon: '💸',
   },
 };
 
@@ -94,9 +78,8 @@ export async function POST(req: NextRequest) {
 
   const displayName = userName || 'Cliente';
 
-  // Build installment schedule for approved loans
   let installmentTableHtml = '';
-  if (newStatus === 'approved' && installments && installments > 0 && paymentPeriod && createdAt) {
+  if (newStatus === 'disbursed' && installments && installments > 0 && paymentPeriod && createdAt) {
     const base = new Date(createdAt);
     const installmentAmount = interest && installments > 0
       ? ((amount * interest) - amount + (amount / installments))
@@ -155,7 +138,6 @@ export async function POST(req: NextRequest) {
     </div>
   `;
 
-  // Send email
   try {
     const transporter = nodemailer.createTransport({
       host: smtpHost,
@@ -173,29 +155,19 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ success: false, error: (e as Error).message }, { status: 500 });
   }
 
-  // Send push notification if phone is provided
+  // Push notification via Firebase Function (non-blocking, fire-and-forget)
   if (phone) {
-    try {
-      const app = getAdminApp();
-      const db = getFirestore(app);
-      const snap = await db.collection('users').where('phone', '==', phone).limit(1).get();
-      if (!snap.empty) {
-        const fcmToken = snap.docs[0].data().fcmToken as string | undefined;
-        if (fcmToken) {
-          await getMessaging(app).send({
-            token: fcmToken,
-            notification: {
-              title: `${config.icon} Solicitud ${config.label}`,
-              body: config.message,
-            },
-            android: { priority: 'high' },
-            apns: { payload: { aps: { sound: 'default' } } },
-          });
-        }
-      }
-    } catch (e) {
-      // Push failure is non-blocking — email already sent
-      console.error('Push notification error:', e);
+    const projectId = process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID;
+    if (projectId) {
+      fetch(`https://us-central1-${projectId}.cloudfunctions.net/sendPushNotification`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          phone,
+          title: `${config.icon} Solicitud ${config.label}`,
+          body: config.message,
+        }),
+      }).catch(() => {/* non-blocking */});
     }
   }
 
