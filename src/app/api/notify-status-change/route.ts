@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import nodemailer from 'nodemailer';
 
-type LoanStatus = 'pending' | 'approved' | 'rejected' | 'disbursed';
+type LoanStatus = 'pending' | 'reviewing' | 'approved' | 'rejected' | 'disbursed';
 
 interface StatusChangePayload {
   email: string;
@@ -30,6 +30,12 @@ const STATUS_CONFIG: Record<LoanStatus, { label: string; message: string; color:
     message: 'Tu solicitud de préstamo ha sido recibida y está pendiente de revisión. Pronto un asesor la revisará.',
     color: '#f59e0b',
     icon: '⏳',
+  },
+  reviewing: {
+    label: 'En revisión',
+    message: 'Tu solicitud está siendo revisada por uno de nuestros asesores. Te notificaremos el resultado pronto.',
+    color: '#a78bfa',
+    icon: '🔍',
   },
   approved: {
     label: 'Aprobada',

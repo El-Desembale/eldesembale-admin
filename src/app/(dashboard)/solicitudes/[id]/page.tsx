@@ -14,10 +14,11 @@ import { ReminderDialog } from '@/components/ReminderDialog';
 import { PaymentCard } from '@/components/PaymentCard';
 
 const ACTION_STATUSES: { label: string; value: LoanRequest['status']; color: string }[] = [
-  { label: 'Pendiente', value: 'pending', color: 'bg-[#b79d66]/14 text-[#8e7335] border-[#d8c394] hover:bg-[#b79d66]/20' },
-  { label: 'Aprobar', value: 'approved', color: 'bg-[#7d8fa4]/14 text-[#57687d] border-[#b4c1cf] hover:bg-[#7d8fa4]/20' },
-  { label: 'Rechazar', value: 'rejected', color: 'bg-[#9d6764]/14 text-[#744846] border-[#d8b0ad] hover:bg-[#9d6764]/20' },
-  { label: 'Desembolsar', value: 'disbursed', color: 'bg-[#7d977d]/16 text-[#4f684f] border-[#bad0ba] hover:bg-[#7d977d]/22' },
+  { label: 'Pendiente',    value: 'pending',   color: 'bg-[#b79d66]/14 text-[#8e7335] border-[#d8c394] hover:bg-[#b79d66]/20' },
+  { label: 'En revisión',  value: 'reviewing', color: 'bg-[#7c6fad]/14 text-[#5b4e8e] border-[#c4bce8] hover:bg-[#7c6fad]/20' },
+  { label: 'Aprobar',      value: 'approved',  color: 'bg-[#7d8fa4]/14 text-[#57687d] border-[#b4c1cf] hover:bg-[#7d8fa4]/20' },
+  { label: 'Rechazar',     value: 'rejected',  color: 'bg-[#9d6764]/14 text-[#744846] border-[#d8b0ad] hover:bg-[#9d6764]/20' },
+  { label: 'Desembolsar',  value: 'disbursed', color: 'bg-[#7d977d]/16 text-[#4f684f] border-[#bad0ba] hover:bg-[#7d977d]/22' },
 ];
 
 const DOCUMENT_ITEMS = [

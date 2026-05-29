@@ -11,6 +11,7 @@ import { LoanRequest, STATUS_LABELS } from '@/lib/types';
 const STATUS_FILTERS: { label: string; value: LoanRequest['status'] | 'all' | 'mora' }[] = [
   { label: 'Todas', value: 'all' },
   { label: 'Pendientes', value: 'pending' },
+  { label: 'En revisión', value: 'reviewing' },
   { label: 'Aprobadas', value: 'approved' },
   { label: 'Rechazadas', value: 'rejected' },
   { label: 'Desembolsadas', value: 'disbursed' },
@@ -47,6 +48,8 @@ function getStatusTone(status: LoanRequest['status'] | 'mora') {
       return 'bg-sky-50 text-sky-700 ring-1 ring-sky-200';
     case 'pending':
       return 'bg-amber-50 text-amber-700 ring-1 ring-amber-200';
+    case 'reviewing':
+      return 'bg-violet-50 text-violet-700 ring-1 ring-violet-200';
     case 'rejected':
       return 'bg-rose-50 text-rose-700 ring-1 ring-rose-200';
     case 'mora':

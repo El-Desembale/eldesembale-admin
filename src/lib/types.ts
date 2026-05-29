@@ -23,7 +23,7 @@ export interface LoanRequest {
   installments: number;
   interest: number;
   paymentPeriod: string;
-  status: 'pending' | 'approved' | 'rejected' | 'disbursed';
+  status: 'pending' | 'reviewing' | 'approved' | 'rejected' | 'disbursed';
   installmentsPaid: number;
   phone: string;
   isSubscribed: boolean;
@@ -53,6 +53,7 @@ export type LoanStatus = LoanRequest['status'];
 
 export const STATUS_LABELS: Record<LoanStatus, string> = {
   pending: 'Pendiente',
+  reviewing: 'En revisión',
   approved: 'Aprobada',
   rejected: 'Rechazada',
   disbursed: 'Desembolsada',
@@ -60,6 +61,7 @@ export const STATUS_LABELS: Record<LoanStatus, string> = {
 
 export const STATUS_COLORS: Record<LoanStatus, string> = {
   pending: '#f59e0b',
+  reviewing: '#a78bfa',
   approved: '#60a5fa',
   rejected: '#f87171',
   disbursed: '#22c55e',
