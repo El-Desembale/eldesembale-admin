@@ -158,8 +158,8 @@ export function ReferencesCard({ loans, user }: { loans: LoanRequest[]; user: Us
   );
 }
 
-// ─── Historial de préstamos con cuotas ───
-export function LoanHistoryCard({ loans }: { loans: LoanRequest[] }) {
+// ─── Historial de préstamos con cuotas + pagos ───
+export function LoanHistoryCard({ loans, payments }: { loans: LoanRequest[]; payments: Payment[] }) {
   const [open, setOpen] = useState<string | null>(null);
   if (loans.length === 0) return null;
 
@@ -201,10 +201,12 @@ export function LoanHistoryCard({ loans }: { loans: LoanRequest[] }) {
 
               {isOpen && (
                 <div className="border-t border-slate-200 p-4">
+                  {/* Cuotas */}
+                  <p className="text-slate-500 text-xs font-semibold uppercase tracking-wide mb-2">Cuotas</p>
                   {schedule.length === 0 ? (
-                    <p className="text-slate-400 text-sm">Este préstamo no tiene cuotas generadas.</p>
+                    <p className="text-slate-400 text-sm mb-4">Este préstamo no tiene cuotas generadas.</p>
                   ) : (
-                    <div className="overflow-x-auto">
+                    <div className="overflow-x-auto mb-5">
                       <table className="w-full text-xs">
                         <thead>
                           <tr className="text-slate-400 text-left">
@@ -237,6 +239,44 @@ export function LoanHistoryCard({ loans }: { loans: LoanRequest[] }) {
                       </table>
                     </div>
                   )}
+
+                  {/* Pagos de esta solicitud */}
+                  {(() => {
+                    const loanPayments = payments
+                      .filter(p => p.loanId === loan.id)
+                      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+                    return (
+                      <>
+                        <p className="text-slate-500 text-xs font-semibold uppercase tracking-wide mb-2">
+                          Pagos de esta solicitud ({loanPayments.length})
+                        </p>
+                        {loanPayments.length === 0 ? (
+                          <p className="text-slate-400 text-sm">Sin pagos registrados para esta solicitud.</p>
+                        ) : (
+                          <div className="flex flex-col gap-2">
+                            {loanPayments.map(p => (
+                              <div key={p.id} className="flex items-center justify-between rounded-lg border border-slate-200 bg-slate-50/60 px-3 py-2">
+                                <div className="flex items-center gap-3">
+                                  <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold ${
+                                    p.status === 'APPROVED' ? 'bg-emerald-50 text-emerald-600'
+                                      : p.status === 'DECLINED' ? 'bg-rose-50 text-rose-600'
+                                      : 'bg-amber-50 text-amber-600'
+                                  }`}>
+                                    {p.status === 'APPROVED' ? 'Aprobado' : p.status === 'DECLINED' ? 'Rechazado' : 'Error'}
+                                  </span>
+                                  <div>
+                                    <p className="text-slate-900 text-xs font-medium">Cuota #{p.installmentNumber ?? '—'}</p>
+                                    <p className="text-slate-400 text-[11px]">{fmtDate(p.createdAt)}</p>
+                                  </div>
+                                </div>
+                                <span className="text-slate-900 text-xs font-semibold">{fmt(p.amount)}</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </>
+                    );
+                  })()}
                 </div>
               )}
             </div>

@@ -440,8 +440,8 @@ export default function UserDetailPage() {
       {/* Referencias (personales + laborales) */}
       <ReferencesCard loans={loans} user={user} />
 
-      {/* Historial de préstamos con detalle de cuotas */}
-      <LoanHistoryCard loans={loans} />
+      {/* Historial de préstamos con detalle de cuotas y pagos */}
+      <LoanHistoryCard loans={loans} payments={payments} />
 
       {/* User loans */}
       <h2 className="text-slate-900 font-bold text-lg mb-3">
