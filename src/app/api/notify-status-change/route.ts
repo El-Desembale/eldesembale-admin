@@ -14,6 +14,7 @@ interface StatusChangePayload {
   paymentPeriod?: string;
   interest?: number;
   createdAt?: string;
+  proofUrl?: string;
 }
 
 function calcInstallmentDate(base: Date, index: number, paymentPeriod: string): Date {
@@ -59,7 +60,7 @@ const STATUS_CONFIG: Record<LoanStatus, { label: string; message: string; color:
 
 export async function POST(req: NextRequest) {
   const body: StatusChangePayload = await req.json();
-  const { email, userName, phone, loanId, amount, newStatus, installments, paymentPeriod, interest, createdAt } = body;
+  const { email, userName, phone, loanId, amount, newStatus, installments, paymentPeriod, interest, createdAt, proofUrl } = body;
 
   const smtpUser = process.env.SMTP_USER;
   const smtpPass = process.env.SMTP_PASS;
@@ -138,6 +139,14 @@ export async function POST(req: NextRequest) {
 
       ${installmentTableHtml}
 
+      ${proofUrl ? `
+      <div style="background: #ecfdf5; border: 1px solid #a7f3d0; border-radius: 12px; padding: 16px; margin-bottom: 20px;">
+        <p style="color: #047857; font-size: 13px; font-weight: bold; margin: 0 0 6px 0;">💸 Comprobante de desembolso</p>
+        <p style="color: #065f46; font-size: 13px; margin: 0 0 10px 0;">Adjuntamos el comprobante del desembolso a tu cuenta. También puedes descargarlo desde el siguiente enlace:</p>
+        <a href="${proofUrl}" style="display: inline-block; background: #059669; color: #ffffff; text-decoration: none; font-size: 13px; font-weight: 600; padding: 8px 16px; border-radius: 8px;">Ver comprobante</a>
+      </div>
+      ` : ''}
+
       <p style="margin-top: 24px; color: #6b7280; font-size: 11px; text-align: center;">
         El Desembale · Si tienes dudas, contáctanos
       </p>
@@ -156,6 +165,9 @@ export async function POST(req: NextRequest) {
       to: email,
       subject: `${config.icon} Tu solicitud está ${config.label.toLowerCase()} · ${amountFormatted}`,
       html,
+      ...(proofUrl
+        ? { attachments: [{ filename: `comprobante-desembolso-${loanId.slice(0, 8)}.${(proofUrl.split('?')[0].split('.').pop() || 'pdf')}`, path: proofUrl }] }
+        : {}),
     });
   } catch (e: unknown) {
     return NextResponse.json({ success: false, error: (e as Error).message }, { status: 500 });

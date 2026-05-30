@@ -5,12 +5,13 @@ import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { doc, getDoc, query, collection, where, getDocs, Timestamp } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-import { updateLoanStatus, deleteLoanRequest, getPaymentsByLoanId, getBudgetConfig, getLoans } from '@/lib/firestore';
+import { updateLoanStatus, disburseLoan, deleteLoanRequest, getPaymentsByLoanId, getBudgetConfig, getLoans } from '@/lib/firestore';
 import { LoanRequest, Payment } from '@/lib/types';
 import { isInMora, getDaysOverdue } from '@/lib/mora';
 import { StatusBadge } from '@/components/StatusBadge';
 import { LoanDocumentsDialog } from '@/components/LoanDocumentsDialog';
 import { ReminderDialog } from '@/components/ReminderDialog';
+import { DisbursementDialog } from '@/components/DisbursementDialog';
 import { PaymentCard } from '@/components/PaymentCard';
 
 const ACTION_STATUSES: { label: string; value: LoanRequest['status']; color: string }[] = [
@@ -62,6 +63,7 @@ export default function LoanDetailPage() {
   const [loading, setLoading] = useState(true);
   const [showDocs, setShowDocs] = useState(false);
   const [showReminder, setShowReminder] = useState(false);
+  const [showDisbursement, setShowDisbursement] = useState(false);
   const [updating, setUpdating] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [clientInfo, setClientInfo] = useState<{ name: string; email?: string; isSubscribed?: boolean } | null>(null);
@@ -111,11 +113,20 @@ export default function LoanDetailPage() {
     fetchLoan();
   }, [id, router]);
 
-  const handleStatusChange = async (status: LoanRequest['status']) => {
+  const handleStatusChange = async (status: LoanRequest['status'], proofUrl?: string) => {
     if (!loan || updating) return;
+    // Desembolsar requiere comprobante: abre el modal
+    if (status === 'disbursed' && !proofUrl) {
+      setShowDisbursement(true);
+      return;
+    }
     setUpdating(true);
     try {
-      await updateLoanStatus(loan.id, status);
+      if (status === 'disbursed' && proofUrl) {
+        await disburseLoan(loan.id, proofUrl);
+      } else {
+        await updateLoanStatus(loan.id, status);
+      }
       setLoan(prev => prev ? { ...prev, status } : prev);
 
       if (clientInfo?.email) {
@@ -134,6 +145,7 @@ export default function LoanDetailPage() {
               paymentPeriod: loan.paymentPeriod,
               interest: loan.interest,
               createdAt: loan.createdAt.toISOString(),
+              proofUrl: proofUrl || undefined,
             }),
           });
           if (!res.ok) {
@@ -152,6 +164,7 @@ export default function LoanDetailPage() {
       console.error(e);
     } finally {
       setUpdating(false);
+      setShowDisbursement(false);
     }
   };
 
@@ -491,6 +504,17 @@ export default function LoanDetailPage() {
           userName={clientInfo?.name || loan.phone}
           daysOverdue={daysOverdue}
           onClose={() => setShowReminder(false)}
+        />
+      )}
+
+      {showDisbursement && (
+        <DisbursementDialog
+          loanId={loan.id}
+          amount={loan.amount}
+          userName={clientInfo?.name || loan.phone}
+          email={clientInfo?.email || ''}
+          onConfirm={(proofUrl) => handleStatusChange('disbursed', proofUrl)}
+          onClose={() => setShowDisbursement(false)}
         />
       )}
     </div>

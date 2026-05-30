@@ -64,6 +64,14 @@ export async function updateLoanStatus(loanId: string, status: LoanRequest['stat
   await updateDoc(doc(db, 'loan_request', loanId), { status });
 }
 
+export async function disburseLoan(loanId: string, proofUrl: string): Promise<void> {
+  await updateDoc(doc(db, 'loan_request', loanId), {
+    status: 'disbursed',
+    disbursement_proof: proofUrl,
+    disbursed_at: Timestamp.now(),
+  });
+}
+
 export async function deleteLoanRequest(loanId: string): Promise<void> {
   await deleteDoc(doc(db, 'loan_request', loanId));
 }
