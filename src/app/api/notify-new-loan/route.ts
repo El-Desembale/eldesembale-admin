@@ -1,6 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
 import nodemailer from 'nodemailer';
 
+const CORS_HEADERS = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type',
+};
+
+export function OPTIONS() {
+  return new NextResponse(null, { status: 204, headers: CORS_HEADERS });
+}
+
 interface NewLoanPayload {
   loanId: string;
   amount: number;
@@ -34,7 +44,7 @@ export async function POST(req: NextRequest) {
   if (!smtpUser || !smtpPass || adminEmails.length === 0) {
     return NextResponse.json(
       { success: false, error: 'Email no configurado. Agrega SMTP_USER, SMTP_PASS y ADMIN_EMAILS en .env.local' },
-      { status: 500 }
+      { status: 500, headers: CORS_HEADERS }
     );
   }
 
@@ -119,8 +129,8 @@ export async function POST(req: NextRequest) {
       html,
     });
 
-    return NextResponse.json({ success: true });
+    return NextResponse.json({ success: true }, { headers: CORS_HEADERS });
   } catch (e: unknown) {
-    return NextResponse.json({ success: false, error: (e as Error).message }, { status: 500 });
+    return NextResponse.json({ success: false, error: (e as Error).message }, { status: 500, headers: CORS_HEADERS });
   }
 }
