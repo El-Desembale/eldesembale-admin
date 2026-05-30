@@ -13,10 +13,20 @@ import { ref, deleteObject } from 'firebase/storage';
 import { db, storage } from './firebase';
 import { LoanRequest, User, Payment } from './types';
 
+function parseReference(raw: Record<string, unknown> | undefined) {
+  const r = raw || {};
+  return {
+    phone: r.phone != null ? String(r.phone) : '',
+    relationship: (r.relationship as string) || '',
+    name: (r.name as string) || '',
+    lastName: (r.last_name as string) || (r.lastName as string) || '',
+  };
+}
+
 function parseLoanInformation(raw: Record<string, unknown>) {
   return {
-    firstReference: (raw?.first_reference as { phone: string; relationship: string }) || { phone: '', relationship: '' },
-    secondReference: (raw?.second_reference as { phone: string; relationship: string }) || { phone: '', relationship: '' },
+    firstReference: parseReference(raw?.first_reference as Record<string, unknown>),
+    secondReference: parseReference(raw?.second_reference as Record<string, unknown>),
     ccBackPicture: (raw?.cc_back_picture as string) || '',
     selfiePicture: (raw?.selfie_picture as string) || '',
     empInvoiceFile: (raw?.emp_invoice_file as string) || '',
@@ -103,6 +113,36 @@ export async function getUserPassword(userId: string): Promise<string | null> {
 
 export async function updateUserPassword(userId: string, newPassword: string): Promise<void> {
   await updateDoc(doc(db, 'users', userId), { password: newPassword });
+}
+
+// Persiste los campos de riesgo calculados en el documento del usuario
+export async function saveUserRisk(userId: string, risk: {
+  riskProfile: string;
+  maxLoanAmount: number;
+  isBlockedForNewLoans: boolean;
+  hasHadLatePayments: boolean;
+  hasSevereLatePayments: boolean;
+  totalLoans: number;
+  paidLoans: number;
+  activeLoans: number;
+  currentLateInstallments: number;
+}): Promise<void> {
+  try {
+    await updateDoc(doc(db, 'users', userId), {
+      riskProfile: risk.riskProfile,
+      maxLoanAmount: risk.maxLoanAmount,
+      isBlockedForNewLoans: risk.isBlockedForNewLoans,
+      hasHadLatePayments: risk.hasHadLatePayments,
+      hasSevereLatePayments: risk.hasSevereLatePayments,
+      totalLoans: risk.totalLoans,
+      paidLoans: risk.paidLoans,
+      activeLoans: risk.activeLoans,
+      currentLateInstallments: risk.currentLateInstallments,
+      riskUpdatedAt: Timestamp.now(),
+    });
+  } catch (e) {
+    console.error('saveUserRisk error', e);
+  }
 }
 
 export async function updateUserSubscription(userId: string, isSubscribed: boolean): Promise<void> {

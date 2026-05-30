@@ -3,13 +3,15 @@
 import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { doc, getDoc } from 'firebase/firestore';
+import { doc, getDoc, Timestamp } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-import { getUserLoans, getPaymentsByPhone, getUserPassword, updateUserPassword, updateUserSubscription, deleteUser } from '@/lib/firestore';
-import { User, UserDocuments, LoanRequest, Payment } from '@/lib/types';
+import { getUserLoans, getPaymentsByPhone, getUserPassword, updateUserPassword, updateUserSubscription, deleteUser, saveUserRisk } from '@/lib/firestore';
+import { User, UserDocuments, LoanRequest, Payment, WorkReference } from '@/lib/types';
 import { LoanCard } from '@/components/LoanCard';
 import { PaymentCard } from '@/components/PaymentCard';
 import { LoanDocumentsDialog } from '@/components/LoanDocumentsDialog';
+import { computeRisk, computeFinancialSummary, RiskCard, FinancialSummaryCard, ReferencesCard, LoanHistoryCard } from '@/components/FichaIntegral';
+import { RISK_COLORS, RISK_LABELS, type RiskAssessment, type FinancialSummary } from '@/lib/risk';
 
 const DOCUMENT_ITEMS: { key: keyof UserDocuments; label: string; helper: string }[] = [
   { key: 'ccFrontalPicture', label: 'Cédula frontal', helper: 'Documento principal' },
@@ -35,6 +37,8 @@ export default function UserDetailPage() {
   const [subscriptionMsg, setSubscriptionMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [showDocs, setShowDocs] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [risk, setRisk] = useState<RiskAssessment | null>(null);
+  const [summary, setSummary] = useState<FinancialSummary | null>(null);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -46,6 +50,7 @@ export default function UserDetailPage() {
         }
         const data = userDoc.data() as Record<string, unknown>;
         const rawDocs = (data.documents as Record<string, string>) || {};
+        const createdAtRaw = data.createdAt;
         const userData: User = {
           id: userDoc.id,
           email: (data.email as string) || '',
@@ -54,6 +59,14 @@ export default function UserDetailPage() {
           lastName: (data.lastName as string) || '',
           isSubscribed: (data.isSubscribed as boolean) || false,
           admin: (data.admin as boolean) || false,
+          documentType: (data.documentType as string) || '',
+          documentNumber: (data.documentNumber as string) || '',
+          countryCode: (data.countryCode as string) || '',
+          direction: (data.direction as string) || '',
+          city: (data.city as string) || '',
+          createdAt: createdAtRaw instanceof Timestamp ? createdAtRaw.toDate() : undefined,
+          workReferences: (data.workReferences as WorkReference[]) || undefined,
+          maxLoanAmount: (data.maxLoanAmount as number) || undefined,
           documents: Object.keys(rawDocs).length > 0 ? {
             ccFrontalPicture: rawDocs.ccFrontalPicture || '',
             ccBackPicture: rawDocs.ccBackPicture || '',
@@ -73,6 +86,24 @@ export default function UserDetailPage() {
           ]);
           setLoans(userLoans);
           setPayments(userPayments);
+
+          // Calcula perfil de riesgo y resumen financiero (sección 13: recalcular al consultar la ficha)
+          const riskResult = computeRisk(userLoans, (data.maxLoanAmount as number) || undefined);
+          const summaryResult = computeFinancialSummary(userLoans, userPayments);
+          setRisk(riskResult);
+          setSummary(summaryResult);
+          // Persiste los campos de riesgo en el documento del usuario
+          saveUserRisk(id, {
+            riskProfile: riskResult.profile,
+            maxLoanAmount: riskResult.maxLoanAmount,
+            isBlockedForNewLoans: riskResult.isBlockedForNewLoans,
+            hasHadLatePayments: riskResult.hasHadLatePayments,
+            hasSevereLatePayments: riskResult.hasSevereLatePayments,
+            totalLoans: riskResult.totalLoans,
+            paidLoans: riskResult.paidLoans,
+            activeLoans: riskResult.activeLoans,
+            currentLateInstallments: riskResult.currentLateInstallments,
+          });
 
           // If user has no documents in their profile, pull from most recent loan
           if (!userData.documents) {
@@ -188,32 +219,54 @@ export default function UserDetailPage() {
           </div>
           <div>
             <h1 className="text-slate-900 text-xl font-bold">{user.name} {user.lastName}</h1>
-            <div className="flex gap-2 mt-1">
+            <div className="flex gap-2 mt-1 flex-wrap">
               {user.isSubscribed && (
                 <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-medium">Suscrito</span>
               )}
               {user.admin && (
                 <span className="text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full">Admin</span>
               )}
+              {risk && (
+                <span className="text-xs px-2 py-0.5 rounded-full font-medium"
+                  style={{ backgroundColor: `${RISK_COLORS[risk.profile]}22`, color: RISK_COLORS[risk.profile] }}>
+                  {RISK_LABELS[risk.profile]}
+                </span>
+              )}
             </div>
           </div>
         </div>
 
+        {/* Datos personales */}
+        <p className="text-slate-500 text-xs font-semibold uppercase tracking-wide mb-2 mt-2">Datos personales</p>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           {user.email && (
-            <div>
-              <p className="text-slate-400 text-xs">Email</p>
-              <p className="text-slate-900 text-sm">{user.email}</p>
-            </div>
+            <div><p className="text-slate-400 text-xs">Email</p><p className="text-slate-900 text-sm">{user.email}</p></div>
           )}
           {user.phone && (
-            <div>
-              <p className="text-slate-400 text-xs">Teléfono</p>
-              <p className="text-slate-900 text-sm">{user.phone}</p>
-            </div>
+            <div><p className="text-slate-400 text-xs">Teléfono</p><p className="text-slate-900 text-sm">{user.countryCode ? `${user.countryCode} ` : ''}{user.phone}</p></div>
           )}
+          {user.documentType && (
+            <div><p className="text-slate-400 text-xs">Tipo de documento</p><p className="text-slate-900 text-sm">{user.documentType}</p></div>
+          )}
+          {user.documentNumber && (
+            <div><p className="text-slate-400 text-xs">Número de documento</p><p className="text-slate-900 text-sm">{user.documentNumber}</p></div>
+          )}
+          {user.direction && (
+            <div><p className="text-slate-400 text-xs">Dirección</p><p className="text-slate-900 text-sm">{user.direction}</p></div>
+          )}
+          {user.city && (
+            <div><p className="text-slate-400 text-xs">Ciudad</p><p className="text-slate-900 text-sm">{user.city}</p></div>
+          )}
+          {user.createdAt && (
+            <div><p className="text-slate-400 text-xs">Cliente desde</p><p className="text-slate-900 text-sm">{user.createdAt.toLocaleDateString('es-CO', { day: '2-digit', month: 'short', year: 'numeric' })}</p></div>
+          )}
+          <div><p className="text-slate-400 text-xs">Suscripción</p><p className="text-slate-900 text-sm">{user.isSubscribed ? 'Activa' : 'Inactiva'}</p></div>
         </div>
       </div>
+
+      {/* Perfil de riesgo + Resumen financiero */}
+      {risk && <RiskCard risk={risk} />}
+      {summary && <FinancialSummaryCard s={summary} />}
 
       {/* Password section */}
       <div className="bg-white border border-slate-200 rounded-2xl p-5 mb-6 shadow-sm">
@@ -383,6 +436,12 @@ export default function UserDetailPage() {
           </div>
         )}
       </div>
+
+      {/* Referencias (personales + laborales) */}
+      <ReferencesCard loans={loans} user={user} />
+
+      {/* Historial de préstamos con detalle de cuotas */}
+      <LoanHistoryCard loans={loans} />
 
       {/* User loans */}
       <h2 className="text-slate-900 font-bold text-lg mb-3">

@@ -1,6 +1,20 @@
 export interface Reference {
   phone: string;
   relationship: string;
+  name?: string;
+  lastName?: string;
+}
+
+export interface WorkReference {
+  companyName: string;
+  contactName?: string;
+  userPosition?: string;
+  contactPhone?: string;
+  contactEmail?: string;
+  companyAddress?: string;
+  employmentTime?: string;
+  contractType?: string;
+  notes?: string;
 }
 
 export type BankInformation = Record<string, string>;
@@ -47,6 +61,19 @@ export interface User {
   admin: boolean;
   loanRequests?: LoanRequest[];
   documents?: UserDocuments;
+  // Datos personales (ya existen en BD para usuarios registrados)
+  documentType?: string;
+  documentNumber?: string;
+  countryCode?: string;
+  direction?: string;
+  city?: string;
+  createdAt?: Date;
+  // Referencias laborales (opcional, se agrega cuando existan)
+  workReferences?: WorkReference[];
+  // Campos de riesgo persistidos (calculados)
+  riskProfile?: 'NEW' | 'GOOD_PAYER' | 'MEDIUM_RISK' | 'BLOCKED';
+  maxLoanAmount?: number;
+  isBlockedForNewLoans?: boolean;
 }
 
 export type LoanStatus = LoanRequest['status'];
