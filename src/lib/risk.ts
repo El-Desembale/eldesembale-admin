@@ -4,8 +4,10 @@ import { isInMora, getExpectedInstallments, getDaysOverdue } from './mora';
 // ─── Perfiles de riesgo y cupos ───
 export type RiskProfile = 'NEW' | 'GOOD_PAYER' | 'MEDIUM_RISK' | 'BLOCKED';
 
-export const NEW_MAX_AMOUNT = 200_000;
-export const GOOD_PAYER_MAX_AMOUNT = 500_000;
+export const NEW_MAX_AMOUNT = 100_000;       // cupo del primer préstamo
+export const CUPO_INCREMENT = 50_000;        // aumento por préstamo pagado sin mora
+export const MAX_CUPO = 1_000_000;           // tope máximo
+export const GOOD_PAYER_MAX_AMOUNT = MAX_CUPO; // (compatibilidad)
 
 export const RISK_LABELS: Record<RiskProfile, string> = {
   NEW: 'Cliente nuevo',
@@ -179,8 +181,8 @@ export function computeRisk(loans: LoanRequest[], previousMax?: number): RiskAss
     loansInMora.length > 1 ||
     loans.some(l => ((l as LoanWithFlags).maxLateInstallments ?? 0) > 1);
 
-  // Buen pagador: pagó completo al menos un préstamo que nunca tuvo mora
-  const paidWithoutMora = paid.some(l => (l as LoanWithFlags).hadMora !== true);
+  // Préstamos pagados completos y sin mora (cuentan para aumentar el cupo)
+  const paidWithoutMoraCount = paid.filter(l => (l as LoanWithFlags).hadMora !== true).length;
 
   let profile: RiskProfile;
   let maxLoanAmount: number;
@@ -194,18 +196,18 @@ export function computeRisk(loans: LoanRequest[], previousMax?: number): RiskAss
     reason = 'El usuario presenta mora grave (más de una cuota en mora).';
   } else if (hadMoraEver) {
     profile = 'MEDIUM_RISK';
-    // Conserva el cupo anterior; no sube automáticamente a 500k
-    maxLoanAmount = Math.max(previousMax ?? NEW_MAX_AMOUNT, NEW_MAX_AMOUNT);
-    if (maxLoanAmount > GOOD_PAYER_MAX_AMOUNT) maxLoanAmount = GOOD_PAYER_MAX_AMOUNT;
+    // Conserva el cupo anterior; no sube automáticamente
+    maxLoanAmount = Math.min(Math.max(previousMax ?? NEW_MAX_AMOUNT, NEW_MAX_AMOUNT), MAX_CUPO);
     reason = 'El usuario ha presentado mora; no aplica para aumento de cupo automático.';
-  } else if (paidWithoutMora) {
+  } else if (paidWithoutMoraCount > 0) {
     profile = 'GOOD_PAYER';
-    maxLoanAmount = GOOD_PAYER_MAX_AMOUNT;
-    reason = 'Pagó al menos un crédito completo sin mora.';
+    // Cupo progresivo: $100.000 base + $50.000 por cada préstamo pagado sin mora
+    maxLoanAmount = Math.min(NEW_MAX_AMOUNT + CUPO_INCREMENT * paidWithoutMoraCount, MAX_CUPO);
+    reason = `Buen pagador: ${paidWithoutMoraCount} crédito(s) pagado(s) sin mora.`;
   } else {
     profile = 'NEW';
     maxLoanAmount = NEW_MAX_AMOUNT;
-    reason = 'Cliente nuevo o sin créditos pagados completamente.';
+    reason = 'Cliente nuevo: primer crédito de hasta \$100.000.';
   }
 
   return {
