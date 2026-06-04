@@ -15,6 +15,11 @@ interface StatusChangePayload {
   interest?: number;
   createdAt?: string;
   proofUrl?: string;
+  rejectionReason?: string;
+  /** Desglose persistido (modelo nuevo): monto y fecha por cuota. */
+  installmentRows?: { amount: number; dueDate: string }[];
+  /** Total a pagar por el cliente (modelo nuevo). */
+  totalCliente?: number;
 }
 
 function calcInstallmentDate(base: Date, index: number, paymentPeriod: string): Date {
@@ -60,7 +65,7 @@ const STATUS_CONFIG: Record<LoanStatus, { label: string; message: string; color:
 
 export async function POST(req: NextRequest) {
   const body: StatusChangePayload = await req.json();
-  const { email, userName, phone, loanId, amount, newStatus, installments, paymentPeriod, interest, createdAt, proofUrl } = body;
+  const { email, userName, phone, loanId, amount, newStatus, installments, paymentPeriod, interest, createdAt, proofUrl, rejectionReason, installmentRows, totalCliente } = body;
 
   const smtpUser = process.env.SMTP_USER;
   const smtpPass = process.env.SMTP_PASS;
@@ -85,20 +90,24 @@ export async function POST(req: NextRequest) {
 
   const displayName = userName || 'Cliente';
 
+  const fmtCOP = (n: number) => new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 }).format(n);
+
   let installmentTableHtml = '';
   if (newStatus === 'disbursed' && installments && installments > 0 && paymentPeriod && createdAt) {
+    // Modelo nuevo: usar el desglose persistido si viene; si no, fallback al cálculo previo.
     const base = new Date(createdAt);
-    const installmentAmount = interest && installments > 0
+    const legacyAmount = interest && installments > 0
       ? ((amount * interest) - amount + (amount / installments))
       : amount / installments;
-    const installmentAmountFmt = new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 }).format(installmentAmount);
-    const rows = Array.from({ length: installments }, (_, i) => {
-      const d = calcInstallmentDate(base, i, paymentPeriod);
-      const dateStr = d.toLocaleDateString('es-CO', { day: '2-digit', month: 'short', year: 'numeric' });
+    const rowsData = installmentRows && installmentRows.length > 0
+      ? installmentRows.map((r) => ({ date: new Date(r.dueDate), amount: r.amount }))
+      : Array.from({ length: installments }, (_, i) => ({ date: calcInstallmentDate(base, i, paymentPeriod), amount: legacyAmount }));
+    const rows = rowsData.map((r, i) => {
+      const dateStr = r.date.toLocaleDateString('es-CO', { day: '2-digit', month: 'short', year: 'numeric' });
       return `<tr>
         <td style="padding: 6px 8px; color: #64748b; font-size: 13px;">Cuota ${i + 1}</td>
         <td style="padding: 6px 8px; color: #0f172a; font-size: 13px; text-align: center;">${dateStr}</td>
-        <td style="padding: 6px 8px; color: #2563eb; font-size: 13px; text-align: right; font-weight: bold;">${installmentAmountFmt}</td>
+        <td style="padding: 6px 8px; color: #2563eb; font-size: 13px; text-align: right; font-weight: bold;">${fmtCOP(r.amount)}</td>
       </tr>`;
     }).join('');
     installmentTableHtml = `
@@ -126,11 +135,23 @@ export async function POST(req: NextRequest) {
         ${config.message}
       </p>
 
+      ${newStatus === 'rejected' && rejectionReason ? `
+      <div style="background: #fef2f2; border: 1px solid #fecaca; border-radius: 12px; padding: 16px; margin-bottom: 20px;">
+        <p style="color: #b91c1c; font-size: 13px; font-weight: bold; margin: 0 0 6px 0;">Motivo del rechazo</p>
+        <p style="color: #991b1b; font-size: 14px; line-height: 1.5; margin: 0;">${rejectionReason}</p>
+      </div>
+      ` : ''}
+
       <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px;">
         <tr>
           <td style="padding: 8px 0; color: #9ca3af; font-size: 13px;">Monto solicitado</td>
           <td style="padding: 8px 0; color: #0f172a; font-size: 14px; text-align: right; font-weight: bold;">${amountFormatted}</td>
         </tr>
+        ${typeof totalCliente === 'number' ? `
+        <tr>
+          <td style="padding: 8px 0; color: #9ca3af; font-size: 13px;">Total a pagar</td>
+          <td style="padding: 8px 0; color: #16a34a; font-size: 14px; text-align: right; font-weight: bold;">${fmtCOP(totalCliente)}</td>
+        </tr>` : ''}
         <tr>
           <td style="padding: 8px 0; color: #9ca3af; font-size: 13px;">No. solicitud</td>
           <td style="padding: 8px 0; color: #9ca3af; font-size: 12px; text-align: right;">${loanId.slice(0, 8)}...</td>
@@ -183,7 +204,7 @@ export async function POST(req: NextRequest) {
         body: JSON.stringify({
           phone,
           title: `${config.icon} Solicitud ${config.label}`,
-          body: config.message,
+          body: newStatus === 'rejected' && rejectionReason ? `Motivo: ${rejectionReason}` : config.message,
         }),
       }).catch(() => {/* non-blocking */});
     }

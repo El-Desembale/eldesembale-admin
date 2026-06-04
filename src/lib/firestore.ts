@@ -12,6 +12,7 @@ import {
 import { ref, deleteObject } from 'firebase/storage';
 import { db, storage } from './firebase';
 import { LoanRequest, User, Payment } from './types';
+import { pricingFromFirestore } from './loan-calc';
 
 function parseReference(raw: Record<string, unknown> | undefined) {
   const r = raw || {};
@@ -53,6 +54,8 @@ function parseLoan(docId: string, data: Record<string, unknown>): LoanRequest {
     phone: (data.phone as string) || '',
     isSubscribed: (data.isSubscribed as boolean) || false,
     loanInformation: parseLoanInformation((data.loan_information as Record<string, unknown>) || {}),
+    rejectionReason: (data.rejection_reason as string) || '',
+    pricing: pricingFromFirestore(data.pricing as Record<string, unknown> | undefined),
   };
 }
 
@@ -72,6 +75,14 @@ export async function getUserLoans(phone: string): Promise<LoanRequest[]> {
 
 export async function updateLoanStatus(loanId: string, status: LoanRequest['status']): Promise<void> {
   await updateDoc(doc(db, 'loan_request', loanId), { status });
+}
+
+export async function rejectLoan(loanId: string, reason: string): Promise<void> {
+  await updateDoc(doc(db, 'loan_request', loanId), {
+    status: 'rejected',
+    rejection_reason: reason,
+    rejected_at: Timestamp.now(),
+  });
 }
 
 export async function disburseLoan(loanId: string, proofUrl: string): Promise<void> {

@@ -5,7 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { doc, getDoc, query, collection, where, getDocs, Timestamp } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-import { updateLoanStatus, disburseLoan, deleteLoanRequest, getPaymentsByLoanId, getBudgetConfig, getLoans } from '@/lib/firestore';
+import { updateLoanStatus, disburseLoan, rejectLoan, deleteLoanRequest, getPaymentsByLoanId, getBudgetConfig, getLoans } from '@/lib/firestore';
 import { LoanRequest, Payment } from '@/lib/types';
 import { isInMora, getDaysOverdue } from '@/lib/mora';
 import { StatusBadge } from '@/components/StatusBadge';
@@ -64,6 +64,8 @@ export default function LoanDetailPage() {
   const [showDocs, setShowDocs] = useState(false);
   const [showReminder, setShowReminder] = useState(false);
   const [showDisbursement, setShowDisbursement] = useState(false);
+  const [showReject, setShowReject] = useState(false);
+  const [rejectReason, setRejectReason] = useState('');
   const [updating, setUpdating] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [clientInfo, setClientInfo] = useState<{ name: string; email?: string; isSubscribed?: boolean } | null>(null);
@@ -113,21 +115,28 @@ export default function LoanDetailPage() {
     fetchLoan();
   }, [id, router]);
 
-  const handleStatusChange = async (status: LoanRequest['status'], proofUrl?: string) => {
+  const handleStatusChange = async (status: LoanRequest['status'], proofUrl?: string, reason?: string) => {
     if (!loan || updating) return;
     // Desembolsar requiere comprobante: abre el modal
     if (status === 'disbursed' && !proofUrl) {
       setShowDisbursement(true);
       return;
     }
+    // Rechazar requiere motivo: abre el modal
+    if (status === 'rejected' && !reason) {
+      setShowReject(true);
+      return;
+    }
     setUpdating(true);
     try {
       if (status === 'disbursed' && proofUrl) {
         await disburseLoan(loan.id, proofUrl);
+      } else if (status === 'rejected' && reason) {
+        await rejectLoan(loan.id, reason);
       } else {
         await updateLoanStatus(loan.id, status);
       }
-      setLoan(prev => prev ? { ...prev, status } : prev);
+      setLoan(prev => prev ? { ...prev, status, rejectionReason: status === 'rejected' ? reason : prev.rejectionReason } : prev);
 
       if (clientInfo?.email) {
         try {
@@ -146,6 +155,17 @@ export default function LoanDetailPage() {
               interest: loan.interest,
               createdAt: loan.createdAt.toISOString(),
               proofUrl: proofUrl || undefined,
+              rejectionReason: reason || undefined,
+              // Desglose persistido (modelo nuevo): el correo usa estos montos/fechas si existen.
+              installmentRows: loan.pricing
+                ? loan.pricing.installments.map((c) => ({
+                    amount: c.totalCliente,
+                    dueDate: (c.fechaVencimiento instanceof Date
+                      ? c.fechaVencimiento
+                      : new Date(c.fechaVencimiento)).toISOString(),
+                  }))
+                : undefined,
+              totalCliente: loan.pricing ? loan.pricing.totalCliente : undefined,
             }),
           });
           if (!res.ok) {
@@ -165,6 +185,7 @@ export default function LoanDetailPage() {
     } finally {
       setUpdating(false);
       setShowDisbursement(false);
+      setShowReject(false);
     }
   };
 
@@ -286,23 +307,59 @@ export default function LoanDetailPage() {
           </div>
         </div>
 
+        {/* Motivo de rechazo */}
+        {loan.status === 'rejected' && loan.rejectionReason && (
+          <div className="mt-4 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3">
+            <p className="text-rose-700 text-xs font-semibold mb-1">Motivo del rechazo</p>
+            <p className="text-rose-600 text-sm">{loan.rejectionReason}</p>
+          </div>
+        )}
+
+        {/* Resumen operativo (modelo nuevo): costos del crédito vs comisión Wompi */}
+        {loan.pricing && (() => {
+          const p = loan.pricing!;
+          const fmt = (n: number) => new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 }).format(n);
+          const costos = p.interesTotal + p.plataformaTotal + p.administrativoTotal;
+          return (
+            <div className="mt-4 pt-4 border-t border-slate-100">
+              <p className="text-slate-400 text-xs mb-2">Resumen del crédito</p>
+              <div className="grid gap-1.5 text-sm">
+                <div className="flex justify-between"><span className="text-slate-500">Capital</span><span className="text-slate-900 font-medium">{fmt(p.capital)}</span></div>
+                <div className="flex justify-between"><span className="text-slate-500">Costos del crédito (interés + plataforma + admin.)</span><span className="text-slate-900 font-medium">{fmt(costos)}</span></div>
+                <div className="flex justify-between"><span className="text-slate-500">Comisión Wompi</span><span className="text-slate-900 font-medium">{fmt(p.wompiTotal)}</span></div>
+                <div className="flex justify-between border-t border-slate-100 pt-1.5"><span className="text-slate-700 font-semibold">Total cobrado al cliente</span><span className="text-emerald-600 font-bold">{fmt(p.totalCliente)}</span></div>
+              </div>
+              <div className="mt-2 grid grid-cols-3 gap-2 text-xs text-slate-500">
+                <div className="rounded-lg bg-slate-50 border border-slate-100 px-2 py-1.5"><p className="text-[10px] uppercase tracking-wide">Interés</p><p className="text-slate-800 font-medium">{fmt(p.interesTotal)}</p></div>
+                <div className="rounded-lg bg-slate-50 border border-slate-100 px-2 py-1.5"><p className="text-[10px] uppercase tracking-wide">Plataforma</p><p className="text-slate-800 font-medium">{fmt(p.plataformaTotal)}</p></div>
+                <div className="rounded-lg bg-slate-50 border border-slate-100 px-2 py-1.5"><p className="text-[10px] uppercase tracking-wide">Administrativo</p><p className="text-slate-800 font-medium">{fmt(p.administrativoTotal)}</p></div>
+              </div>
+            </div>
+          );
+        })()}
+
         {/* Installment dates inside main card */}
         {loan.installments > 0 && (() => {
           const base = loan.createdAt instanceof Date ? loan.createdAt : new Date(loan.createdAt);
-          const installmentAmount = ((loan.amount * loan.interest) - loan.amount + (loan.amount / loan.installments));
           const isActive = loan.status === 'disbursed';
+          // Modelo nuevo: usar el desglose persistido; si no existe (créditos antiguos), fallback al cálculo previo.
+          const legacyAmount = ((loan.amount * loan.interest) - loan.amount + (loan.amount / loan.installments));
           return (
             <div className="mt-4 pt-4 border-t border-slate-100">
               <p className="text-slate-400 text-xs mb-2">Fechas de pago</p>
               <div className="grid gap-1.5">
                 {Array.from({ length: loan.installments }, (_, i) => {
+                  const cuota = loan.pricing?.installments[i];
                   let dueDate: Date;
-                  if (loan.paymentPeriod === 'Mensual') {
+                  if (cuota) {
+                    dueDate = cuota.fechaVencimiento instanceof Date ? cuota.fechaVencimiento : new Date(cuota.fechaVencimiento);
+                  } else if (loan.paymentPeriod === 'Mensual') {
                     dueDate = new Date(base.getFullYear(), base.getMonth() + 1 + i, base.getDate());
                   } else {
                     const first = new Date(base.getFullYear(), base.getMonth() + 1, base.getDate());
                     dueDate = new Date(first.getTime() + 15 * i * 24 * 60 * 60 * 1000);
                   }
+                  const installmentAmount = cuota ? cuota.totalCliente : legacyAmount;
                   const paid = isActive && i < loan.installmentsPaid;
                   const isNext = isActive && i === loan.installmentsPaid;
                   return (
@@ -516,6 +573,47 @@ export default function LoanDetailPage() {
           onConfirm={(proofUrl) => handleStatusChange('disbursed', proofUrl)}
           onClose={() => setShowDisbursement(false)}
         />
+      )}
+
+      {/* Modal de motivo de rechazo */}
+      {showReject && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white border border-slate-200 rounded-2xl w-full max-w-lg flex flex-col gap-4 p-6 shadow-xl">
+            <div className="flex justify-between items-center">
+              <div className="flex items-center gap-2">
+                <span className="text-2xl">❌</span>
+                <h2 className="text-slate-900 font-bold text-lg">Rechazar solicitud</h2>
+              </div>
+              <button onClick={() => { setShowReject(false); setRejectReason(''); }} className="text-slate-400 hover:text-slate-600 text-2xl leading-none">×</button>
+            </div>
+            <p className="text-slate-500 text-sm">Indica el motivo del rechazo. Este mensaje se le enviará y mostrará al cliente.</p>
+            <textarea
+              value={rejectReason}
+              onChange={e => setRejectReason(e.target.value)}
+              rows={4}
+              maxLength={400}
+              placeholder="Ej: Los documentos no coinciden con los datos suministrados."
+              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-slate-900 text-sm placeholder-slate-400 focus:outline-none focus:border-rose-400 focus:ring-1 focus:ring-rose-400 transition-colors resize-none"
+            />
+            <p className="text-slate-400 text-xs -mt-2">{rejectReason.length}/400</p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => { setShowReject(false); setRejectReason(''); }}
+                disabled={updating}
+                className="flex-1 py-2.5 rounded-xl text-sm font-medium border border-slate-200 text-slate-500 hover:bg-slate-50 transition-colors disabled:opacity-50"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={() => handleStatusChange('rejected', undefined, rejectReason.trim())}
+                disabled={updating || rejectReason.trim().length < 5}
+                className="flex-1 py-2.5 rounded-xl text-sm font-medium bg-rose-600 text-white hover:bg-rose-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {updating ? 'Rechazando...' : 'Rechazar y notificar'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

@@ -20,6 +20,10 @@ interface NewLoanPayload {
   interest?: number;
   createdAt?: string;
   clientName?: string;
+  /** Montos por cuota (modelo nuevo, incluye Wompi). */
+  installmentAmounts?: number[];
+  /** Total a pagar por el cliente (modelo nuevo). */
+  totalCliente?: number;
 }
 
 function calcInstallmentDate(base: Date, index: number, paymentPeriod: string): Date {
@@ -32,7 +36,7 @@ function calcInstallmentDate(base: Date, index: number, paymentPeriod: string): 
 
 export async function POST(req: NextRequest) {
   const body: NewLoanPayload = await req.json();
-  const { loanId, amount, phone, installments, paymentPeriod, interest, createdAt, clientName } = body;
+  const { loanId, amount, phone, installments, paymentPeriod, interest, createdAt, clientName, installmentAmounts, totalCliente } = body;
 
   const smtpUser = process.env.SMTP_USER;
   const smtpPass = process.env.SMTP_PASS;
@@ -57,11 +61,16 @@ export async function POST(req: NextRequest) {
   const clientDisplay = clientName ? `${clientName} (${phone})` : phone;
   const loanUrl = `https://eldesembale-admin.vercel.app/solicitudes/${loanId}`;
 
+  const fmtCOP = (n: number) => new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 }).format(n);
+
   const base = createdAt ? new Date(createdAt) : new Date();
-  const installmentAmount = interest && installments > 0
+  const hasPricing = Array.isArray(installmentAmounts) && installmentAmounts.length > 0;
+  const legacyAmount = interest && installments > 0
     ? ((amount * interest) - amount + (amount / installments))
     : (installments > 0 ? amount / installments : 0);
-  const installmentAmountFmt = new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 }).format(installmentAmount);
+  // Modelo nuevo: usar montos por cuota del desglose; si no, fallback al cálculo previo.
+  const perCuota = (i: number) => (hasPricing ? installmentAmounts![i] : legacyAmount);
+  const installmentAmountFmt = fmtCOP(perCuota(0));
 
   const installmentRows = Array.from({ length: installments }, (_, i) => {
     const d = calcInstallmentDate(base, i, paymentPeriod);
@@ -69,7 +78,7 @@ export async function POST(req: NextRequest) {
     return `<tr>
       <td style="padding: 6px 8px; color: #64748b; font-size: 13px;">Cuota ${i + 1}</td>
       <td style="padding: 6px 8px; color: #0f172a; font-size: 13px; text-align: center;">${dateStr}</td>
-      <td style="padding: 6px 8px; color: #2563eb; font-size: 13px; text-align: right; font-weight: bold;">${installmentAmountFmt}</td>
+      <td style="padding: 6px 8px; color: #2563eb; font-size: 13px; text-align: right; font-weight: bold;">${fmtCOP(perCuota(i))}</td>
     </tr>`;
   }).join('');
 
@@ -94,6 +103,11 @@ export async function POST(req: NextRequest) {
           <td style="padding: 8px 0; color: #9ca3af; font-size: 13px;">Valor por cuota</td>
           <td style="padding: 8px 0; color: #0f172a; font-size: 14px; text-align: right; font-weight: bold;">${installmentAmountFmt}</td>
         </tr>
+        ${typeof totalCliente === 'number' ? `
+        <tr>
+          <td style="padding: 8px 0; color: #9ca3af; font-size: 13px;">Total a pagar</td>
+          <td style="padding: 8px 0; color: #16a34a; font-size: 14px; text-align: right; font-weight: bold;">${fmtCOP(totalCliente)}</td>
+        </tr>` : ''}
         <tr>
           <td style="padding: 8px 0; color: #9ca3af; font-size: 13px;">No. solicitud</td>
           <td style="padding: 8px 0; color: #9ca3af; font-size: 12px; text-align: right;">${loanId.slice(0, 8)}...</td>

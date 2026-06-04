@@ -33,9 +33,13 @@ export function LoanCard({ loan, userName, inMora }: Props) {
   }).format(loan.amount);
 
   const nextDate = getNextInstallmentDate(loan);
-  const installmentAmount = loan.installments > 0
-    ? ((loan.amount * loan.interest) - loan.amount + (loan.amount / loan.installments))
-    : 0;
+  // Modelo nuevo: usar el desglose persistido; fallback al cálculo previo para créditos antiguos.
+  const nextIdx = Math.min(loan.installmentsPaid, Math.max(0, loan.installments - 1));
+  const installmentAmount = loan.pricing
+    ? (loan.pricing.installments[nextIdx]?.totalCliente ?? loan.pricing.installments[0]?.totalCliente ?? 0)
+    : loan.installments > 0
+      ? ((loan.amount * loan.interest) - loan.amount + (loan.amount / loan.installments))
+      : 0;
   const installmentAmountFmt = new Intl.NumberFormat('es-CO', {
     style: 'currency',
     currency: 'COP',
@@ -64,7 +68,9 @@ export function LoanCard({ loan, userName, inMora }: Props) {
         </div>
         <div className="flex gap-4 text-sm text-slate-500">
           <span>{loan.installmentsPaid}/{loan.installments} cuotas</span>
-          <span>{loan.interest}% interés</span>
+          {loan.pricing
+            ? <span>Total {new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 }).format(loan.pricing.totalCliente)}</span>
+            : <span>{loan.interest}% interés</span>}
           <span>{loan.paymentPeriod}</span>
         </div>
         {nextDate && (

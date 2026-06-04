@@ -50,13 +50,17 @@ export default function PagosPage() {
   }, [users]);
 
   const finance = useMemo(() => {
+    // Total a cobrar al cliente: modelo nuevo usa el desglose persistido; fallback al modelo
+    // previo (total = capital × multiplicador de interés).
+    const loanTotal = (l: typeof loans[number]) =>
+      l.pricing ? l.pricing.totalCliente : l.amount * (l.interest || 1.1);
     const approvedLoans = loans.filter(l => l.status === 'approved');
     const capitalLent = approvedLoans.reduce((sum, l) => sum + l.amount, 0);
-    const totalToCollect = approvedLoans.reduce((sum, l) => sum + l.amount * (1 + l.interest / 100), 0);
+    const totalToCollect = approvedLoans.reduce((sum, l) => sum + loanTotal(l), 0);
     const totalInterest = totalToCollect - capitalLent;
     const installmentCollected = approvedLoans.reduce((sum, l) => {
       if (l.installments <= 0) return sum;
-      const totalWithInterest = l.amount * (1 + l.interest / 100);
+      const totalWithInterest = loanTotal(l);
       const perInstallment = totalWithInterest / l.installments;
       return sum + l.installmentsPaid * perInstallment;
     }, 0);
@@ -78,7 +82,7 @@ export default function PagosPage() {
     const capitalAtRisk = moraLoans.reduce((sum, l) => {
       if (l.installments <= 0) return sum;
       const remaining = l.installments - l.installmentsPaid;
-      const totalWithInterest = l.amount * (1 + l.interest / 100);
+      const totalWithInterest = loanTotal(l);
       return sum + (remaining / l.installments) * totalWithInterest;
     }, 0);
     const completedLoans = approvedLoans.filter(l => l.installmentsPaid >= l.installments).length;
@@ -507,7 +511,9 @@ function LoansTrackingView({ items }: { items: LoanTrackingItem[] }) {
 
               <div className="flex gap-4 mt-2 text-xs text-slate-400">
                 <span>Pagado: {formatCOP(item.paidAmount)}</span>
-                <span>{item.loan.interest}% interés</span>
+                {item.loan.pricing
+                  ? <span>Total: {formatCOP(item.loan.pricing.totalCliente)}</span>
+                  : <span>{item.loan.interest}% interés</span>}
                 <span>{item.approvedPayments.length} pagos registrados</span>
               </div>
             </button>

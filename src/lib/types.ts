@@ -1,3 +1,6 @@
+import type { LoanPricing } from './loan-calc';
+export type { LoanPricing } from './loan-calc';
+
 export interface Reference {
   phone: string;
   relationship: string;
@@ -42,6 +45,9 @@ export interface LoanRequest {
   phone: string;
   isSubscribed: boolean;
   loanInformation: LoanInformation;
+  rejectionReason?: string;
+  /** Desglose calculado y guardado al crear el crédito (capital, conceptos, Wompi). */
+  pricing?: LoanPricing | null;
 }
 
 export interface UserDocuments {
