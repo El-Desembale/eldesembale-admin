@@ -91,6 +91,7 @@ export default function PagosPage() {
     let installmentCollected = 0; // bruto cobrado en cuotas (capital + intereses + Wompi)
     let interestCollected = 0;  // ingreso financiero: lo cobrado por encima del capital
     let wompiInstallments = 0;  // comisiones Wompi de cuotas pagadas
+    let wompiInstallmentsTotal = 0; // comisiones Wompi de TODAS las cuotas (pagadas + por pagar)
     let totalToCollect = 0;
     let totalInterest = 0;
 
@@ -103,6 +104,10 @@ export default function PagosPage() {
       installmentCollected += agg.gross;
       interestCollected += agg.gross - agg.capital;
       wompiInstallments += agg.wompi;
+      // Comisión Wompi total del crédito (para proyectar la utilidad al cierre).
+      wompiInstallmentsTotal += l.pricing
+        ? l.pricing.wompiTotal
+        : (l.installments > 0 ? wompiFeeFromGross(loanTotal(l) / l.installments) * l.installments : 0);
     }
 
     const capitalPending = capitalLent - capitalRecovered;
@@ -118,6 +123,11 @@ export default function PagosPage() {
     // utilidad_neta = intereses_cobrados + suscripciones_brutas − total_comisiones_wompi.
     // El capital prestado/recuperado nunca entra en la utilidad.
     const netProfit = interestCollected + subscriptionGross - totalWompi;
+
+    // Proyección al cierre: si todos los créditos activos se pagan completos.
+    const pendingInterest = totalInterest - interestCollected;          // interés que falta por entrar
+    const pendingWompi = Math.max(0, wompiInstallmentsTotal - wompiInstallments); // Wompi de cuotas por pagar
+    const estimatedProfitAtClose = netProfit + pendingInterest - pendingWompi;
 
     const subscribedCount = users.filter(u => u.isSubscribed).length;
     const moraLoans = activeLoans.filter(isInMora);
@@ -135,6 +145,7 @@ export default function PagosPage() {
       installmentCollected, interestCollected, pendingToCollect,
       subscribedCount, subscriptionGross, subscriptionNet,
       wompiInstallments, wompiSubscriptions, totalWompi,
+      pendingInterest, pendingWompi, estimatedProfitAtClose,
       netProfit, moraCount, capitalAtRisk,
       approvedLoansCount: activeLoans.length, completedLoans,
     };
@@ -369,6 +380,10 @@ interface FinanceData {
   wompiInstallments: number;
   wompiSubscriptions: number;
   totalWompi: number;
+  // Proyección al cierre
+  pendingInterest: number;
+  pendingWompi: number;
+  estimatedProfitAtClose: number;
   // Utilidad
   netProfit: number;
   // Otros indicadores
@@ -406,9 +421,6 @@ function FinancialOverview({ finance, period, totalCapital, onSaveBudget }: { fi
     setEditingBudget(false);
     setSavingBudget(false);
   };
-
-  const collectProgress = finance.totalToCollect > 0
-    ? (finance.installmentCollected / finance.totalToCollect) * 100 : 0;
 
   return (
     <div className="flex flex-col gap-6">
@@ -462,118 +474,91 @@ function FinancialOverview({ finance, period, totalCapital, onSaveBudget }: { fi
         )}
       </div>
 
-      {/* Utilidad neta */}
+      {/* ── Utilidad: cascada ingresos − costos = utilidad (resultado acumulado) ── */}
       <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
-        <p className="text-slate-500 text-sm mb-1">Utilidad neta</p>
-        <p className={`font-bold text-4xl ${finance.netProfit >= 0 ? 'text-blue-600' : 'text-red-500'}`}>{formatCOP(finance.netProfit)}</p>
-        <p className="text-slate-400 text-xs mt-2">
-          Intereses cobrados + suscripciones brutas − total comisiones Wompi. El capital prestado no se considera ingreso ni ganancia.
+        <div className="flex items-center justify-between mb-1">
+          <p className="text-slate-500 text-sm">Utilidad neta · lo que ya ganaste</p>
+          <span className="text-[11px] text-slate-400 bg-slate-50 border border-slate-200 rounded-full px-2 py-0.5">Acumulado</span>
+        </div>
+        <p className={`font-bold text-4xl mb-5 ${finance.netProfit >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>
+          {formatCOP(finance.netProfit)}
+        </p>
+
+        <div className="flex flex-col gap-2 text-sm">
+          <p className="text-slate-400 text-[11px] font-semibold uppercase tracking-wider">Ingresos cobrados</p>
+          <CascadeRow label="Intereses cobrados" value={finance.interestCollected} sign="+" />
+          <CascadeRow label="Suscripciones cobradas" value={finance.subscriptionGross} sign="+" />
+          <div className="flex justify-between items-center border-t border-slate-100 pt-2">
+            <span className="text-slate-600 font-medium">Total ingresos</span>
+            <span className="text-slate-900 font-semibold">{formatCOP(finance.interestCollected + finance.subscriptionGross)}</span>
+          </div>
+
+          <p className="text-slate-400 text-[11px] font-semibold uppercase tracking-wider mt-3">Costos</p>
+          <CascadeRow label="Comisiones Wompi" value={finance.totalWompi} sign="−" />
+
+          <div className="flex justify-between items-center border-t-2 border-slate-200 pt-3 mt-1">
+            <span className="text-slate-900 font-bold">Utilidad neta</span>
+            <span className={`font-bold text-lg ${finance.netProfit >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>{formatCOP(finance.netProfit)}</span>
+          </div>
+        </div>
+        <p className="text-slate-400 text-xs mt-3">
+          Solo cuenta lo ya cobrado. El capital prestado no es ingreso ni ganancia (va más abajo).
         </p>
       </div>
 
-      {/* Recaudado en el período (pagos registrados, sensible al filtro de fechas) */}
+      {/* ── Proyección al cierre ── */}
+      <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
+        <p className="text-slate-500 text-sm mb-3">Proyección · si todos los créditos se pagan completos</p>
+        <div className="flex flex-col gap-2 text-sm">
+          <CascadeRow label="Utilidad ya ganada (hoy)" value={finance.netProfit} sign="+" />
+          <CascadeRow label="Intereses por cobrar" value={finance.pendingInterest} sign="+" />
+          <CascadeRow label="Comisiones Wompi por pagar" value={finance.pendingWompi} sign="−" />
+          <div className="flex justify-between items-center border-t-2 border-slate-200 pt-3 mt-1">
+            <span className="text-slate-900 font-bold">Utilidad estimada al cierre</span>
+            <span className={`font-bold text-lg ${finance.estimatedProfitAtClose >= 0 ? 'text-blue-600' : 'text-red-500'}`}>{formatCOP(finance.estimatedProfitAtClose)}</span>
+          </div>
+        </div>
+      </div>
+
+      {/* ── Capital (no es ganancia) ── */}
+      <div>
+        <h3 className="text-slate-700 font-semibold mb-3 text-xs uppercase tracking-wider">Capital · no es ganancia</h3>
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          <MetricCard label="Capital prestado" value={formatCOP(finance.capitalLent)} sublabel={`${finance.approvedLoansCount} préstamos activos`} color="text-slate-900" />
+          <MetricCard label="Recuperado" value={formatCOP(finance.capitalRecovered)} sublabel="Ya devuelto en cuotas" color="text-emerald-600" />
+          <MetricCard label="Afuera (por recuperar)" value={formatCOP(finance.capitalPending)} color="text-yellow-600" />
+          <MetricCard label="En riesgo" value={formatCOP(finance.capitalAtRisk)} sublabel={`${finance.moraCount} en mora`} color={finance.moraCount > 0 ? 'text-orange-500' : 'text-slate-900'} />
+        </div>
+      </div>
+
+      {/* ── Movimiento de caja en el período (pagos registrados, sensible al filtro) ── */}
       <div>
         <h3 className="text-slate-700 font-semibold mb-3 text-xs uppercase tracking-wider">
-          {period.isFiltered ? 'Recaudado en el período · pagos registrados' : 'Recaudado · pagos registrados'}
+          {period.isFiltered ? 'Caja · recaudado en el período' : 'Caja · recaudado (pagos registrados)'}
         </h3>
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-          <MetricCard label="Bruto recaudado" value={formatCOP(period.grossTotal)} sublabel={`${period.count} transacciones`} color="text-blue-600" />
+          <MetricCard label="Bruto recaudado" value={formatCOP(period.grossTotal)} sublabel={`${period.count} transacciones`} color="text-slate-900" />
           <MetricCard label="Comisiones Wompi" value={formatCOP(period.wompiTotal)} color="text-red-500" />
           <MetricCard label="Neto recibido" value={formatCOP(period.netTotal)} color="text-emerald-600" />
           <MetricCard label="Cuotas / Suscripciones" value={`${period.installmentCount} / ${period.subscriptionCount}`} sublabel={`${formatCOP(period.installmentGross)} · ${formatCOP(period.subscriptionGross)}`} color="text-slate-900" />
         </div>
         {!period.isFiltered && (
-          <p className="text-slate-400 text-xs mt-2">Usa el filtro de fechas para ver lo recaudado en un rango específico.</p>
+          <p className="text-slate-400 text-xs mt-2">Usa el filtro de fechas (arriba) para ver lo recaudado en un rango específico.</p>
         )}
       </div>
+    </div>
+  );
+}
 
-      {/* Capital (no es ingreso) */}
-      <div>
-        <h3 className="text-slate-700 font-semibold mb-3 text-xs uppercase tracking-wider">Capital · no es ingreso ni utilidad</h3>
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-          <MetricCard label="Capital prestado" value={formatCOP(finance.capitalLent)} sublabel={`${finance.approvedLoansCount} préstamos`} color="text-slate-900" />
-          <MetricCard label="Capital recuperado" value={formatCOP(finance.capitalRecovered)} color="text-blue-600" />
-          <MetricCard label="Capital pendiente" value={formatCOP(finance.capitalPending)} color="text-yellow-600" />
-          <MetricCard label="Capital en riesgo" value={formatCOP(finance.capitalAtRisk)} sublabel={`${finance.moraCount} en mora`} color={finance.moraCount > 0 ? 'text-orange-500' : 'text-slate-900'} />
-        </div>
-      </div>
-
-      {/* Ingresos */}
-      <div>
-        <h3 className="text-slate-700 font-semibold mb-3 text-xs uppercase tracking-wider">Ingresos</h3>
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-          <MetricCard label="Intereses cobrados" value={formatCOP(finance.interestCollected)} sublabel="Ingreso financiero (cuotas pagadas, sin capital)" color="text-blue-600" />
-          <MetricCard label="Suscripciones cobradas" value={formatCOP(finance.subscriptionGross)} sublabel={`Bruto · ${finance.subscribedCount} suscritos`} color="text-blue-600" />
-          <MetricCard label="Suscripciones netas" value={formatCOP(finance.subscriptionNet)} sublabel="Después de comisión Wompi" color="text-slate-900" />
-          <MetricCard label="Intereses esperados" value={formatCOP(finance.totalInterest)} sublabel="Total por cobrar (sin capital)" color="text-slate-900" />
-        </div>
-      </div>
-
-      {/* Costos: comisiones Wompi */}
-      <div>
-        <h3 className="text-slate-700 font-semibold mb-3 text-xs uppercase tracking-wider">Costos · comisiones Wompi</h3>
-        <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
-          <MetricCard label="Comisiones Wompi cuotas" value={formatCOP(finance.wompiInstallments)} sublabel="De cuotas pagadas" color="text-red-500" />
-          <MetricCard label="Comisiones Wompi suscripciones" value={formatCOP(finance.wompiSubscriptions)} color="text-red-500" />
-          <MetricCard label="Total comisiones Wompi" value={formatCOP(finance.totalWompi)} color="text-red-500" />
-        </div>
-      </div>
-
-      {/* Recaudación (flujo de caja, mezcla capital + ingresos) */}
-      <div>
-        <h3 className="text-slate-700 font-semibold mb-3 text-xs uppercase tracking-wider">Recaudación · flujo de caja</h3>
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-          <MetricCard label="Total a cobrar" value={formatCOP(finance.totalToCollect)} sublabel="Capital + intereses" color="text-slate-900" />
-          <MetricCard label="Total recaudado" value={formatCOP(finance.installmentCollected)} sublabel="Bruto cobrado en cuotas" color="text-blue-600" />
-          <MetricCard label="Pendiente por cobrar" value={formatCOP(finance.pendingToCollect)} color="text-yellow-600" />
-          <MetricCard label="Préstamos completados" value={`${finance.completedLoans} / ${finance.approvedLoansCount}`} color="text-slate-900" />
-        </div>
-
-        {/* Progress bar */}
-        <div className="bg-white border border-slate-200 rounded-xl p-4 mt-3 shadow-sm">
-          <div className="flex justify-between text-xs text-slate-400 mb-2">
-            <span>Progreso de recaudación</span>
-            <span>{collectProgress.toFixed(1)}%</span>
-          </div>
-          <div className="w-full bg-slate-100 rounded-full h-3 overflow-hidden">
-            <div
-              className="h-full rounded-full bg-blue-500 transition-all"
-              style={{ width: `${Math.min(collectProgress, 100)}%` }}
-            />
-          </div>
-          <div className="flex justify-between text-xs mt-2">
-            <span className="text-blue-600">{formatCOP(finance.installmentCollected)}</span>
-            <span className="text-slate-400">{formatCOP(finance.totalToCollect)}</span>
-          </div>
-        </div>
-      </div>
-
-      {/* Estado de resultados: ingresos − costos = utilidad. El capital va aparte. */}
-      <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
-        <h3 className="text-slate-900 font-semibold mb-4">Estado de resultados</h3>
-        <div className="flex flex-col gap-2 text-sm">
-          <p className="text-slate-400 text-xs font-semibold uppercase tracking-wider">Ingresos</p>
-          <PnlRow label="Intereses cobrados (ingreso financiero)" value={finance.interestCollected} />
-          <PnlRow label="Suscripciones cobradas (brutas)" value={finance.subscriptionGross} />
-          <div className="border-t border-slate-200 my-1" />
-          <PnlRow label="Total ingresos" value={finance.interestCollected + finance.subscriptionGross} bold />
-          <p className="text-slate-400 text-xs font-semibold uppercase tracking-wider mt-2">Costos</p>
-          <PnlRow label="Comisiones Wompi cuotas" value={-finance.wompiInstallments} />
-          <PnlRow label="Comisiones Wompi suscripciones" value={-finance.wompiSubscriptions} />
-          <div className="border-t border-slate-200 my-1" />
-          <PnlRow label="Total comisiones Wompi" value={-finance.totalWompi} bold />
-          <div className="border-t border-slate-200 my-1" />
-          <PnlRow label="Utilidad neta" value={finance.netProfit} bold highlight />
-        </div>
-        <div className="mt-4 pt-3 border-t border-slate-200">
-          <p className="text-slate-400 text-xs font-semibold uppercase tracking-wider mb-2">Capital · movimiento aparte, nunca se mezcla con la utilidad</p>
-          <div className="flex flex-col gap-2 text-sm">
-            <PnlRow label="Capital prestado" value={-finance.capitalLent} />
-            <PnlRow label="Capital recuperado" value={finance.capitalRecovered} />
-            <PnlRow label="Capital pendiente de recuperar" value={finance.capitalPending} bold />
-          </div>
-        </div>
-      </div>
+// Fila de cascada: etiqueta a la izquierda, monto con signo + (verde) o − (rojo) a la derecha.
+function CascadeRow({ label, value, sign }: { label: string; value: number; sign: '+' | '−' }) {
+  const positive = sign === '+';
+  return (
+    <div className="flex justify-between items-center">
+      <span className="text-slate-500">{label}</span>
+      <span className={positive ? 'text-emerald-600 font-medium' : 'text-red-500 font-medium'}>
+        {sign} {formatCOP(value)}
+      </span>
     </div>
   );
 }
@@ -584,18 +569,6 @@ function MetricCard({ label, value, sublabel, color = 'text-slate-900' }: { labe
       <p className="text-slate-400 text-xs">{label}</p>
       <p className={`${color} font-bold text-lg`}>{value}</p>
       {sublabel && <p className="text-slate-400 text-xs mt-0.5">{sublabel}</p>}
-    </div>
-  );
-}
-
-function PnlRow({ label, value, bold, highlight }: { label: string; value: number; bold?: boolean; highlight?: boolean }) {
-  const color = highlight
-    ? value >= 0 ? 'text-blue-600' : 'text-red-500'
-    : value >= 0 ? 'text-slate-900' : 'text-red-500';
-  return (
-    <div className="flex justify-between items-center">
-      <span className={`text-slate-500 ${bold ? 'font-semibold text-slate-900' : ''}`}>{label}</span>
-      <span className={`${color} ${bold ? 'font-bold' : 'font-medium'}`}>{formatCOP(value)}</span>
     </div>
   );
 }
