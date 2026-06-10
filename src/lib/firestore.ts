@@ -12,7 +12,7 @@ import {
 import { ref, deleteObject } from 'firebase/storage';
 import { db, storage } from './firebase';
 import { LoanRequest, User, Payment } from './types';
-import { pricingFromFirestore } from './loan-calc';
+import { pricingFromFirestore, wompiFeeFromGross } from './loan-calc';
 
 function parseReference(raw: Record<string, unknown> | undefined) {
   const r = raw || {};
@@ -203,13 +203,25 @@ function parsePayment(docId: string, data: Record<string, unknown>): Payment {
     ? data.created_at.toDate()
     : new Date();
 
+  const amount = (data.amount_in_cents as number)
+    ? (data.amount_in_cents as number) / 100
+    : ((data.amount as number) || 0);
+  // Campos financieros estándar. Pagos legacy sin desglose: la comisión Wompi se
+  // estima con las tarifas por defecto para no dejar el costo en cero.
+  const grossAmount = typeof data.gross_amount === 'number' ? data.gross_amount : amount;
+  const wompiFee = typeof data.wompi_fee === 'number' ? data.wompi_fee : wompiFeeFromGross(grossAmount);
+  const netAmount = typeof data.net_amount === 'number' ? data.net_amount : grossAmount - wompiFee;
+
   return {
     id: docId,
     reference: (data.reference as string) || '',
     type: (data.type as Payment['type']) || 'subscription',
     status: (data.status as Payment['status']) || 'ERROR',
-    amount: (data.amount_in_cents as number) ? (data.amount_in_cents as number) / 100 : ((data.amount as number) || 0),
+    amount,
     amountInCents: (data.amount_in_cents as number) || 0,
+    grossAmount,
+    wompiFee,
+    netAmount,
     currency: (data.currency as string) || 'COP',
     userPhone: (data.user_phone as string) || '',
     userEmail: (data.user_email as string) || '',

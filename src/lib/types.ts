@@ -111,6 +111,12 @@ export interface Payment {
   status: PaymentStatus;
   amount: number;
   amountInCents: number;
+  /** Valor bruto pagado por el cliente. */
+  grossAmount: number;
+  /** Comisión Wompi de la transacción (exacta si fue registrada; estimada para pagos legacy). */
+  wompiFee: number;
+  /** Valor neto recibido por la empresa (bruto - comisión Wompi). */
+  netAmount: number;
   currency: string;
   userPhone: string;
   userEmail: string;

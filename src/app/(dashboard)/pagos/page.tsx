@@ -7,6 +7,7 @@ import { useUsers } from '@/hooks/useUsers';
 import { PaymentStatusBadge } from '@/components/PaymentStatusBadge';
 import { Payment, LoanRequest } from '@/lib/types';
 import { isInMora, getDaysOverdue } from '@/lib/mora';
+import { wompiFeeFromGross } from '@/lib/loan-calc';
 import { getBudgetConfig, setBudgetConfig } from '@/lib/firestore';
 import Link from 'next/link';
 
@@ -24,6 +25,8 @@ export default function PagosPage() {
   const { users } = useUsers();
   const [tab, setTab] = useState<Tab>('overview');
   const [search, setSearch] = useState('');
+  const [fromDate, setFromDate] = useState('');
+  const [toDate, setToDate] = useState('');
   const [totalCapital, setTotalCapital] = useState<number>(0);
   const [loadingBudget, setLoadingBudget] = useState(true);
 
@@ -54,51 +57,122 @@ export default function PagosPage() {
     // previo (total = capital × multiplicador de interés).
     const loanTotal = (l: typeof loans[number]) =>
       l.pricing ? l.pricing.totalCliente : l.amount * (l.interest || 1.1);
-    const approvedLoans = loans.filter(l => l.status === 'approved');
-    const capitalLent = approvedLoans.reduce((sum, l) => sum + l.amount, 0);
-    const totalToCollect = approvedLoans.reduce((sum, l) => sum + loanTotal(l), 0);
-    const totalInterest = totalToCollect - capitalLent;
-    const installmentCollected = approvedLoans.reduce((sum, l) => {
-      if (l.installments <= 0) return sum;
-      const totalWithInterest = loanTotal(l);
-      const perInstallment = totalWithInterest / l.installments;
-      return sum + l.installmentsPaid * perInstallment;
-    }, 0);
-    const capitalRecovered = approvedLoans.reduce((sum, l) => {
-      if (l.installments <= 0) return sum;
-      const perInstallment = l.amount / l.installments;
-      return sum + l.installmentsPaid * perInstallment;
-    }, 0);
-    const interestEarned = installmentCollected - capitalRecovered;
+
+    // Agregados de las cuotas YA pagadas de un préstamo: capital recuperado, bruto cobrado
+    // y comisión Wompi. Con desglose persistido es exacto; legacy se prorratea y la comisión
+    // se estima con las tarifas por defecto.
+    const paidAggregates = (l: typeof loans[number]) => {
+      const n = l.installments;
+      const paid = Math.min(l.installmentsPaid, n);
+      if (l.pricing) {
+        let capital = 0, gross = 0, wompi = 0;
+        for (let i = 0; i < paid && i < l.pricing.installments.length; i++) {
+          const c = l.pricing.installments[i];
+          capital += c.capital;
+          gross += c.totalCliente;
+          wompi += c.comisionWompi;
+        }
+        return { capital, gross, wompi };
+      }
+      if (n <= 0 || paid <= 0) return { capital: 0, gross: 0, wompi: 0 };
+      const perGross = loanTotal(l) / n;
+      return {
+        capital: paid * (l.amount / n),
+        gross: paid * perGross,
+        wompi: paid * wompiFeeFromGross(perGross),
+      };
+    };
+
+    // Préstamos con capital comprometido o entregado.
+    const activeLoans = loans.filter(l => l.status === 'approved' || l.status === 'disbursed');
+
+    let capitalLent = 0;        // capital prestado (NO es ingreso)
+    let capitalRecovered = 0;   // capital recuperado vía cuotas pagadas
+    let installmentCollected = 0; // bruto cobrado en cuotas (capital + intereses + Wompi)
+    let interestCollected = 0;  // ingreso financiero: lo cobrado por encima del capital
+    let wompiInstallments = 0;  // comisiones Wompi de cuotas pagadas
+    let totalToCollect = 0;
+    let totalInterest = 0;
+
+    for (const l of activeLoans) {
+      capitalLent += l.amount;
+      totalToCollect += loanTotal(l);
+      totalInterest += loanTotal(l) - l.amount;
+      const agg = paidAggregates(l);
+      capitalRecovered += agg.capital;
+      installmentCollected += agg.gross;
+      interestCollected += agg.gross - agg.capital;
+      wompiInstallments += agg.wompi;
+    }
+
+    const capitalPending = capitalLent - capitalRecovered;
     const pendingToCollect = totalToCollect - installmentCollected;
+
+    // Suscripciones: bruto pagado, comisión Wompi y neto recibido (desde pagos registrados).
+    const subPayments = payments.filter(p => p.type === 'subscription' && p.status === 'APPROVED');
+    const subscriptionGross = subPayments.reduce((sum, p) => sum + p.grossAmount, 0);
+    const wompiSubscriptions = subPayments.reduce((sum, p) => sum + p.wompiFee, 0);
+    const subscriptionNet = subPayments.reduce((sum, p) => sum + p.netAmount, 0);
+
+    const totalWompi = wompiInstallments + wompiSubscriptions;
+    // utilidad_neta = intereses_cobrados + suscripciones_brutas − total_comisiones_wompi.
+    // El capital prestado/recuperado nunca entra en la utilidad.
+    const netProfit = interestCollected + subscriptionGross - totalWompi;
+
     const subscribedCount = users.filter(u => u.isSubscribed).length;
-    const subscriptionRevenue = payments
-      .filter(p => p.type === 'subscription' && p.status === 'APPROVED')
-      .reduce((sum, p) => sum + p.amount, 0);
-    const totalCollected = installmentCollected + subscriptionRevenue;
-    const netProfit = interestEarned + subscriptionRevenue;
-    const moraLoans = approvedLoans.filter(isInMora);
+    const moraLoans = activeLoans.filter(isInMora);
     const moraCount = moraLoans.length;
     const capitalAtRisk = moraLoans.reduce((sum, l) => {
       if (l.installments <= 0) return sum;
       const remaining = l.installments - l.installmentsPaid;
-      const totalWithInterest = loanTotal(l);
-      return sum + (remaining / l.installments) * totalWithInterest;
+      return sum + (remaining / l.installments) * loanTotal(l);
     }, 0);
-    const completedLoans = approvedLoans.filter(l => l.installmentsPaid >= l.installments).length;
+    const completedLoans = activeLoans.filter(l => l.installmentsPaid >= l.installments).length;
 
     return {
-      capitalLent, totalToCollect, totalInterest,
-      installmentCollected, capitalRecovered, interestEarned,
-      pendingToCollect, subscribedCount, subscriptionRevenue,
-      totalCollected, netProfit, moraCount, capitalAtRisk,
-      approvedLoansCount: approvedLoans.length, completedLoans,
+      capitalLent, capitalRecovered, capitalPending,
+      totalToCollect, totalInterest,
+      installmentCollected, interestCollected, pendingToCollect,
+      subscribedCount, subscriptionGross, subscriptionNet,
+      wompiInstallments, wompiSubscriptions, totalWompi,
+      netProfit, moraCount, capitalAtRisk,
+      approvedLoansCount: activeLoans.length, completedLoans,
     };
   }, [loans, users, payments]);
 
+  // Rango de fechas activo: filtra las transacciones (pagos) por fecha de creación.
+  // Los saldos de capital del resumen son acumulados y no se ven afectados.
+  const filteredPayments = useMemo(() => {
+    const from = fromDate ? new Date(`${fromDate}T00:00:00`) : null;
+    const to = toDate ? new Date(`${toDate}T23:59:59`) : null;
+    if (!from && !to) return payments;
+    return payments.filter(p => (!from || p.createdAt >= from) && (!to || p.createdAt <= to));
+  }, [payments, fromDate, toDate]);
+
+  // Recaudación real (pagos registrados) dentro del rango: bruto, comisión Wompi y neto,
+  // discriminando cuotas y suscripciones.
+  const periodSummary = useMemo(() => {
+    const approved = filteredPayments.filter(p => p.status === 'APPROVED');
+    const inst = approved.filter(p => p.type === 'installment');
+    const subs = approved.filter(p => p.type === 'subscription');
+    const sum = (arr: Payment[], key: 'grossAmount' | 'wompiFee' | 'netAmount') =>
+      arr.reduce((s, p) => s + p[key], 0);
+    return {
+      isFiltered: !!(fromDate || toDate),
+      count: approved.length,
+      grossTotal: sum(approved, 'grossAmount'),
+      wompiTotal: sum(approved, 'wompiFee'),
+      netTotal: sum(approved, 'netAmount'),
+      installmentGross: sum(inst, 'grossAmount'),
+      installmentCount: inst.length,
+      subscriptionGross: sum(subs, 'grossAmount'),
+      subscriptionCount: subs.length,
+    };
+  }, [filteredPayments, fromDate, toDate]);
+
   const subscribedUsers = useMemo(() => {
     const subPaymentsByPhone: Record<string, Payment> = {};
-    for (const p of payments) {
+    for (const p of filteredPayments) {
       if (p.type === 'subscription' && p.status === 'APPROVED') {
         if (!subPaymentsByPhone[p.userPhone] || p.createdAt > subPaymentsByPhone[p.userPhone].createdAt) {
           subPaymentsByPhone[p.userPhone] = p;
@@ -112,38 +186,47 @@ export default function PagosPage() {
         return {
           user: u,
           name: [u.name, u.lastName].filter(Boolean).join(' ') || u.phone,
-          amount: payment?.amount ?? 0,
+          // Suscripción discriminada: bruto pagado, comisión Wompi y neto recibido.
+          grossAmount: payment?.grossAmount ?? 0,
+          wompiFee: payment?.wompiFee ?? 0,
+          netAmount: payment?.netAmount ?? 0,
           date: payment?.createdAt || null,
           hasPaymentRecord: !!payment,
         };
-      });
+      })
+      // Con rango de fechas activo, solo se muestran suscripciones con pago en el período.
+      .filter(item => !(fromDate || toDate) || item.hasPaymentRecord);
     if (!search) return items;
     const q = search.toLowerCase();
     return items.filter(item =>
       item.name.toLowerCase().includes(q) || item.user.phone.includes(q) || item.user.email.toLowerCase().includes(q),
     );
-  }, [users, payments, search]);
+  }, [users, filteredPayments, search, fromDate, toDate]);
 
   const loanTracking = useMemo(() => {
     const paymentsByLoan: Record<string, Payment[]> = {};
-    for (const p of payments) {
+    for (const p of filteredPayments) {
       if (p.type === 'installment' && p.loanId) {
         if (!paymentsByLoan[p.loanId]) paymentsByLoan[p.loanId] = [];
         paymentsByLoan[p.loanId].push(p);
       }
     }
-    const approvedLoans = loans.filter(l => l.status === 'approved');
-    const items = approvedLoans.map(loan => {
-      const loanPayments = paymentsByLoan[loan.id] || [];
-      const approvedPayments = loanPayments.filter(p => p.status === 'APPROVED');
-      const paidAmount = approvedPayments.reduce((sum, p) => sum + p.amount, 0);
-      const userName = usersByPhone[loan.phone]?.name || loan.phone;
-      const mora = isInMora(loan);
-      const daysOverdue = getDaysOverdue(loan);
-      const progress = loan.installments > 0 ? (loan.installmentsPaid / loan.installments) * 100 : 0;
-      const completed = loan.installmentsPaid >= loan.installments;
-      return { loan, loanPayments, approvedPayments, paidAmount, userName, mora, daysOverdue, progress, completed };
-    });
+    const dateFilterActive = !!(fromDate || toDate);
+    const approvedLoans = loans.filter(l => l.status === 'approved' || l.status === 'disbursed');
+    const items = approvedLoans
+      // Con rango de fechas activo, solo préstamos con pagos en el período.
+      .filter(loan => !dateFilterActive || (paymentsByLoan[loan.id]?.length ?? 0) > 0)
+      .map(loan => {
+        const loanPayments = paymentsByLoan[loan.id] || [];
+        const approvedPayments = loanPayments.filter(p => p.status === 'APPROVED');
+        const paidAmount = approvedPayments.reduce((sum, p) => sum + p.amount, 0);
+        const userName = usersByPhone[loan.phone]?.name || loan.phone;
+        const mora = isInMora(loan);
+        const daysOverdue = getDaysOverdue(loan);
+        const progress = loan.installments > 0 ? (loan.installmentsPaid / loan.installments) * 100 : 0;
+        const completed = loan.installmentsPaid >= loan.installments;
+        return { loan, loanPayments, approvedPayments, paidAmount, userName, mora, daysOverdue, progress, completed };
+      });
     items.sort((a, b) => {
       if (a.mora && !b.mora) return -1;
       if (!a.mora && b.mora) return 1;
@@ -156,7 +239,7 @@ export default function PagosPage() {
     return items.filter(item =>
       item.userName.toLowerCase().includes(q) || item.loan.phone.includes(q),
     );
-  }, [loans, payments, usersByPhone, search]);
+  }, [loans, filteredPayments, usersByPhone, search, fromDate, toDate]);
 
   return (
     <div>
@@ -177,7 +260,7 @@ export default function PagosPage() {
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-2 mb-6">
+      <div className="flex gap-2 mb-4">
         {([
           { key: 'overview' as const, label: 'Resumen Financiero' },
           { key: 'loans' as const, label: 'Seguimiento Préstamos' },
@@ -195,6 +278,42 @@ export default function PagosPage() {
         ))}
       </div>
 
+      {/* Filtro por fechas (aplica a las transacciones de pago) */}
+      <div className="flex flex-wrap items-end gap-3 mb-6">
+        <div className="flex flex-col">
+          <label className="text-xs text-slate-400 mb-1">Desde</label>
+          <input
+            type="date"
+            value={fromDate}
+            max={toDate || undefined}
+            onChange={e => setFromDate(e.target.value)}
+            className="bg-white border border-slate-200 rounded-xl px-3 py-2 text-sm text-slate-700 focus:outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400 transition-colors shadow-sm"
+          />
+        </div>
+        <div className="flex flex-col">
+          <label className="text-xs text-slate-400 mb-1">Hasta</label>
+          <input
+            type="date"
+            value={toDate}
+            min={fromDate || undefined}
+            onChange={e => setToDate(e.target.value)}
+            className="bg-white border border-slate-200 rounded-xl px-3 py-2 text-sm text-slate-700 focus:outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400 transition-colors shadow-sm"
+          />
+        </div>
+        {(fromDate || toDate) && (
+          <button
+            onClick={() => { setFromDate(''); setToDate(''); }}
+            className="text-slate-500 border border-slate-200 px-3 py-2 rounded-xl text-sm hover:bg-slate-50 transition-colors"
+          >
+            Limpiar
+          </button>
+        )}
+        <span className="text-sm text-slate-400 pb-1">
+          {periodSummary.count} pago{periodSummary.count === 1 ? '' : 's'}
+          {periodSummary.isFiltered ? ' en el período' : ' registrados'}
+        </span>
+      </div>
+
       {loading ? (
         <div className="flex justify-center py-16">
           <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
@@ -202,7 +321,7 @@ export default function PagosPage() {
       ) : error ? (
         <p className="text-red-500 text-center py-8">{error}</p>
       ) : tab === 'overview' ? (
-        <FinancialOverview finance={finance} totalCapital={totalCapital} onSaveBudget={handleSaveBudget} />
+        <FinancialOverview finance={finance} period={periodSummary} totalCapital={totalCapital} onSaveBudget={handleSaveBudget} />
       ) : tab === 'loans' ? (
         <>
           <input
@@ -233,24 +352,46 @@ export default function PagosPage() {
 // ─── Resumen Financiero ───
 
 interface FinanceData {
+  // Capital (no es ingreso ni utilidad)
   capitalLent: number;
+  capitalRecovered: number;
+  capitalPending: number;
+  // Recaudación de cuotas
   totalToCollect: number;
   totalInterest: number;
   installmentCollected: number;
-  capitalRecovered: number;
-  interestEarned: number;
   pendingToCollect: number;
-  subscribedCount: number;
-  subscriptionRevenue: number;
-  totalCollected: number;
+  // Ingresos
+  interestCollected: number;
+  subscriptionGross: number;
+  subscriptionNet: number;
+  // Costos (comisiones Wompi)
+  wompiInstallments: number;
+  wompiSubscriptions: number;
+  totalWompi: number;
+  // Utilidad
   netProfit: number;
+  // Otros indicadores
+  subscribedCount: number;
   moraCount: number;
   capitalAtRisk: number;
   approvedLoansCount: number;
   completedLoans: number;
 }
 
-function FinancialOverview({ finance, totalCapital, onSaveBudget }: { finance: FinanceData; totalCapital: number; onSaveBudget: (v: number) => Promise<void> }) {
+interface PeriodSummary {
+  isFiltered: boolean;
+  count: number;
+  grossTotal: number;
+  wompiTotal: number;
+  netTotal: number;
+  installmentGross: number;
+  installmentCount: number;
+  subscriptionGross: number;
+  subscriptionCount: number;
+}
+
+function FinancialOverview({ finance, period, totalCapital, onSaveBudget }: { finance: FinanceData; period: PeriodSummary; totalCapital: number; onSaveBudget: (v: number) => Promise<void> }) {
   const [editingBudget, setEditingBudget] = useState(false);
   const [budgetInput, setBudgetInput] = useState('');
   const [savingBudget, setSavingBudget] = useState(false);
@@ -321,30 +462,69 @@ function FinancialOverview({ finance, totalCapital, onSaveBudget }: { finance: F
         )}
       </div>
 
-      {/* Ganancia neta */}
+      {/* Utilidad neta */}
       <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
-        <p className="text-slate-500 text-sm mb-1">Ganancia neta</p>
-        <p className="text-blue-600 font-bold text-4xl">{formatCOP(finance.netProfit)}</p>
-        <p className="text-slate-400 text-xs mt-2">Intereses cobrados + ingresos por suscripciones</p>
+        <p className="text-slate-500 text-sm mb-1">Utilidad neta</p>
+        <p className={`font-bold text-4xl ${finance.netProfit >= 0 ? 'text-blue-600' : 'text-red-500'}`}>{formatCOP(finance.netProfit)}</p>
+        <p className="text-slate-400 text-xs mt-2">
+          Intereses cobrados + suscripciones brutas − total comisiones Wompi. El capital prestado no se considera ingreso ni ganancia.
+        </p>
       </div>
 
-      {/* Capital */}
+      {/* Recaudado en el período (pagos registrados, sensible al filtro de fechas) */}
       <div>
-        <h3 className="text-slate-700 font-semibold mb-3 text-xs uppercase tracking-wider">Capital</h3>
+        <h3 className="text-slate-700 font-semibold mb-3 text-xs uppercase tracking-wider">
+          {period.isFiltered ? 'Recaudado en el período · pagos registrados' : 'Recaudado · pagos registrados'}
+        </h3>
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          <MetricCard label="Bruto recaudado" value={formatCOP(period.grossTotal)} sublabel={`${period.count} transacciones`} color="text-blue-600" />
+          <MetricCard label="Comisiones Wompi" value={formatCOP(period.wompiTotal)} color="text-red-500" />
+          <MetricCard label="Neto recibido" value={formatCOP(period.netTotal)} color="text-emerald-600" />
+          <MetricCard label="Cuotas / Suscripciones" value={`${period.installmentCount} / ${period.subscriptionCount}`} sublabel={`${formatCOP(period.installmentGross)} · ${formatCOP(period.subscriptionGross)}`} color="text-slate-900" />
+        </div>
+        {!period.isFiltered && (
+          <p className="text-slate-400 text-xs mt-2">Usa el filtro de fechas para ver lo recaudado en un rango específico.</p>
+        )}
+      </div>
+
+      {/* Capital (no es ingreso) */}
+      <div>
+        <h3 className="text-slate-700 font-semibold mb-3 text-xs uppercase tracking-wider">Capital · no es ingreso ni utilidad</h3>
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
           <MetricCard label="Capital prestado" value={formatCOP(finance.capitalLent)} sublabel={`${finance.approvedLoansCount} préstamos`} color="text-slate-900" />
           <MetricCard label="Capital recuperado" value={formatCOP(finance.capitalRecovered)} color="text-blue-600" />
-          <MetricCard label="Capital pendiente" value={formatCOP(finance.capitalLent - finance.capitalRecovered)} color="text-yellow-600" />
+          <MetricCard label="Capital pendiente" value={formatCOP(finance.capitalPending)} color="text-yellow-600" />
           <MetricCard label="Capital en riesgo" value={formatCOP(finance.capitalAtRisk)} sublabel={`${finance.moraCount} en mora`} color={finance.moraCount > 0 ? 'text-orange-500' : 'text-slate-900'} />
         </div>
       </div>
 
-      {/* Recaudación */}
+      {/* Ingresos */}
       <div>
-        <h3 className="text-slate-700 font-semibold mb-3 text-xs uppercase tracking-wider">Recaudación</h3>
+        <h3 className="text-slate-700 font-semibold mb-3 text-xs uppercase tracking-wider">Ingresos</h3>
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          <MetricCard label="Intereses cobrados" value={formatCOP(finance.interestCollected)} sublabel="Ingreso financiero (cuotas pagadas, sin capital)" color="text-blue-600" />
+          <MetricCard label="Suscripciones cobradas" value={formatCOP(finance.subscriptionGross)} sublabel={`Bruto · ${finance.subscribedCount} suscritos`} color="text-blue-600" />
+          <MetricCard label="Suscripciones netas" value={formatCOP(finance.subscriptionNet)} sublabel="Después de comisión Wompi" color="text-slate-900" />
+          <MetricCard label="Intereses esperados" value={formatCOP(finance.totalInterest)} sublabel="Total por cobrar (sin capital)" color="text-slate-900" />
+        </div>
+      </div>
+
+      {/* Costos: comisiones Wompi */}
+      <div>
+        <h3 className="text-slate-700 font-semibold mb-3 text-xs uppercase tracking-wider">Costos · comisiones Wompi</h3>
+        <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
+          <MetricCard label="Comisiones Wompi cuotas" value={formatCOP(finance.wompiInstallments)} sublabel="De cuotas pagadas" color="text-red-500" />
+          <MetricCard label="Comisiones Wompi suscripciones" value={formatCOP(finance.wompiSubscriptions)} color="text-red-500" />
+          <MetricCard label="Total comisiones Wompi" value={formatCOP(finance.totalWompi)} color="text-red-500" />
+        </div>
+      </div>
+
+      {/* Recaudación (flujo de caja, mezcla capital + ingresos) */}
+      <div>
+        <h3 className="text-slate-700 font-semibold mb-3 text-xs uppercase tracking-wider">Recaudación · flujo de caja</h3>
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
           <MetricCard label="Total a cobrar" value={formatCOP(finance.totalToCollect)} sublabel="Capital + intereses" color="text-slate-900" />
-          <MetricCard label="Total recaudado" value={formatCOP(finance.installmentCollected)} color="text-blue-600" />
+          <MetricCard label="Total recaudado" value={formatCOP(finance.installmentCollected)} sublabel="Bruto cobrado en cuotas" color="text-blue-600" />
           <MetricCard label="Pendiente por cobrar" value={formatCOP(finance.pendingToCollect)} color="text-yellow-600" />
           <MetricCard label="Préstamos completados" value={`${finance.completedLoans} / ${finance.approvedLoansCount}`} color="text-slate-900" />
         </div>
@@ -368,41 +548,30 @@ function FinancialOverview({ finance, totalCapital, onSaveBudget }: { finance: F
         </div>
       </div>
 
-      {/* Intereses */}
-      <div>
-        <h3 className="text-slate-700 font-semibold mb-3 text-xs uppercase tracking-wider">Intereses</h3>
-        <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
-          <MetricCard label="Intereses esperados" value={formatCOP(finance.totalInterest)} sublabel="Total por cobrar" color="text-slate-900" />
-          <MetricCard label="Intereses ganados" value={formatCOP(finance.interestEarned)} sublabel="Ya cobrados" color="text-blue-600" />
-          <MetricCard label="Intereses pendientes" value={formatCOP(finance.totalInterest - finance.interestEarned)} color="text-yellow-600" />
-        </div>
-      </div>
-
-      {/* Suscripciones */}
-      <div>
-        <h3 className="text-slate-700 font-semibold mb-3 text-xs uppercase tracking-wider">Suscripciones</h3>
-        <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
-          <MetricCard label="Usuarios suscritos" value={String(finance.subscribedCount)} color="text-blue-600" />
-          <MetricCard label="Ingreso por suscripciones" value={formatCOP(finance.subscriptionRevenue)} sublabel="Suma de pagos reales" color="text-blue-600" />
-          <MetricCard label="Ingreso total" value={formatCOP(finance.totalCollected)} sublabel="Cuotas + suscripciones" color="text-slate-900" />
-        </div>
-      </div>
-
-      {/* Estado de resultados */}
+      {/* Estado de resultados: ingresos − costos = utilidad. El capital va aparte. */}
       <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
         <h3 className="text-slate-900 font-semibold mb-4">Estado de resultados</h3>
         <div className="flex flex-col gap-2 text-sm">
-          <PnlRow label="Ingresos por cuotas (cobradas)" value={finance.installmentCollected} />
-          <PnlRow label="Ingresos por suscripciones" value={finance.subscriptionRevenue} />
+          <p className="text-slate-400 text-xs font-semibold uppercase tracking-wider">Ingresos</p>
+          <PnlRow label="Intereses cobrados (ingreso financiero)" value={finance.interestCollected} />
+          <PnlRow label="Suscripciones cobradas (brutas)" value={finance.subscriptionGross} />
           <div className="border-t border-slate-200 my-1" />
-          <PnlRow label="Total ingresos" value={finance.totalCollected} bold />
+          <PnlRow label="Total ingresos" value={finance.interestCollected + finance.subscriptionGross} bold />
+          <p className="text-slate-400 text-xs font-semibold uppercase tracking-wider mt-2">Costos</p>
+          <PnlRow label="Comisiones Wompi cuotas" value={-finance.wompiInstallments} />
+          <PnlRow label="Comisiones Wompi suscripciones" value={-finance.wompiSubscriptions} />
           <div className="border-t border-slate-200 my-1" />
-          <PnlRow label="Capital prestado (desembolsado)" value={-finance.capitalLent} />
-          <PnlRow label="Capital recuperado" value={finance.capitalRecovered} />
+          <PnlRow label="Total comisiones Wompi" value={-finance.totalWompi} bold />
           <div className="border-t border-slate-200 my-1" />
-          <PnlRow label="Flujo neto (ingresos - capital + recuperado)" value={finance.totalCollected - finance.capitalLent + finance.capitalRecovered} bold highlight />
-          <div className="border-t border-slate-200 my-1" />
-          <PnlRow label="Ganancia neta (intereses + suscripciones)" value={finance.netProfit} bold highlight />
+          <PnlRow label="Utilidad neta" value={finance.netProfit} bold highlight />
+        </div>
+        <div className="mt-4 pt-3 border-t border-slate-200">
+          <p className="text-slate-400 text-xs font-semibold uppercase tracking-wider mb-2">Capital · movimiento aparte, nunca se mezcla con la utilidad</p>
+          <div className="flex flex-col gap-2 text-sm">
+            <PnlRow label="Capital prestado" value={-finance.capitalLent} />
+            <PnlRow label="Capital recuperado" value={finance.capitalRecovered} />
+            <PnlRow label="Capital pendiente de recuperar" value={finance.capitalPending} bold />
+          </div>
         </div>
       </div>
     </div>
@@ -520,6 +689,37 @@ function LoansTrackingView({ items }: { items: LoanTrackingItem[] }) {
 
             {expanded && (
               <div className="border-t border-slate-200 px-4 pb-4">
+                {/* Desglose financiero del préstamo: capital, intereses, Wompi y ganancia neta */}
+                {(() => {
+                  const p = item.loan.pricing;
+                  const total = p ? p.totalCliente : item.loan.amount * (item.loan.interest || 1.1);
+                  const capital = item.loan.amount;
+                  const wompi = p
+                    ? p.wompiTotal
+                    : wompiFeeFromGross(total / Math.max(item.loan.installments, 1)) * Math.max(item.loan.installments, 1);
+                  const interest = total - capital;
+                  const netGain = total - capital - wompi;
+                  return (
+                    <div className="mt-3 grid grid-cols-2 lg:grid-cols-4 gap-2">
+                      <div className="bg-slate-50 border border-slate-100 rounded-lg px-3 py-2">
+                        <p className="text-[10px] uppercase tracking-wide text-slate-400">Capital</p>
+                        <p className="text-slate-900 text-sm font-semibold">{formatCOP(capital)}</p>
+                      </div>
+                      <div className="bg-slate-50 border border-slate-100 rounded-lg px-3 py-2">
+                        <p className="text-[10px] uppercase tracking-wide text-slate-400">Intereses</p>
+                        <p className="text-blue-600 text-sm font-semibold">{formatCOP(interest)}</p>
+                      </div>
+                      <div className="bg-slate-50 border border-slate-100 rounded-lg px-3 py-2">
+                        <p className="text-[10px] uppercase tracking-wide text-slate-400">Comisiones Wompi</p>
+                        <p className="text-red-500 text-sm font-semibold">{formatCOP(wompi)}</p>
+                      </div>
+                      <div className="bg-slate-50 border border-slate-100 rounded-lg px-3 py-2">
+                        <p className="text-[10px] uppercase tracking-wide text-slate-400">Ganancia neta</p>
+                        <p className={`text-sm font-semibold ${netGain >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>{formatCOP(netGain)}</p>
+                      </div>
+                    </div>
+                  );
+                })()}
                 <div className="flex items-center justify-between mt-3 mb-2">
                   <p className="text-slate-400 text-xs font-medium">Historial de pagos</p>
                   <Link
@@ -547,7 +747,12 @@ function LoansTrackingView({ items }: { items: LoanTrackingItem[] }) {
                             <p className="text-slate-400 text-xs">{formatDate(payment.createdAt)}</p>
                           </div>
                         </div>
-                        <p className="text-slate-900 text-sm font-medium">{formatCOP(payment.amount)}</p>
+                        <div className="text-right">
+                          <p className="text-slate-900 text-sm font-medium">{formatCOP(payment.grossAmount)}</p>
+                          <p className="text-slate-400 text-[11px]">
+                            Wompi {formatCOP(payment.wompiFee)} · Neto {formatCOP(payment.netAmount)}
+                          </p>
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -566,7 +771,9 @@ function LoansTrackingView({ items }: { items: LoanTrackingItem[] }) {
 interface SubscribedItem {
   user: { id: string; name: string; lastName: string; phone: string; email: string };
   name: string;
-  amount: number;
+  grossAmount: number;
+  wompiFee: number;
+  netAmount: number;
   date: Date | null;
   hasPaymentRecord: boolean;
 }
@@ -576,8 +783,28 @@ function SubscriptionsView({ items }: { items: SubscribedItem[] }) {
     return <p className="text-slate-400 text-center py-8">No hay usuarios suscritos</p>;
   }
 
+  const withPayment = items.filter(i => i.hasPaymentRecord);
+  const totalGross = withPayment.reduce((s, i) => s + i.grossAmount, 0);
+  const totalFee = withPayment.reduce((s, i) => s + i.wompiFee, 0);
+  const totalNet = withPayment.reduce((s, i) => s + i.netAmount, 0);
+
   return (
     <div className="flex flex-col gap-2">
+      {/* Totales: bruto cobrado, comisión Wompi y neto recibido */}
+      <div className="grid grid-cols-3 gap-2 mb-2">
+        <div className="bg-white border border-slate-200 rounded-xl p-3 shadow-sm">
+          <p className="text-slate-400 text-xs">Bruto cobrado</p>
+          <p className="text-blue-600 font-bold">{formatCOP(totalGross)}</p>
+        </div>
+        <div className="bg-white border border-slate-200 rounded-xl p-3 shadow-sm">
+          <p className="text-slate-400 text-xs">Comisión Wompi</p>
+          <p className="text-red-500 font-bold">{formatCOP(totalFee)}</p>
+        </div>
+        <div className="bg-white border border-slate-200 rounded-xl p-3 shadow-sm">
+          <p className="text-slate-400 text-xs">Neto recibido</p>
+          <p className="text-emerald-600 font-bold">{formatCOP(totalNet)}</p>
+        </div>
+      </div>
       {items.map(item => (
         <Link key={item.user.id} href={`/usuarios/${item.user.id}`}>
           <div className="bg-white border border-slate-200 rounded-xl p-4 flex items-center justify-between hover:border-blue-300 hover:shadow-md transition-all shadow-sm">
@@ -591,16 +818,17 @@ function SubscriptionsView({ items }: { items: SubscribedItem[] }) {
               </div>
             </div>
             <div className="text-right">
-              {item.amount > 0 ? (
-                <p className="text-blue-600 font-semibold">{formatCOP(item.amount)}</p>
+              {item.hasPaymentRecord ? (
+                <>
+                  <p className="text-blue-600 font-semibold">{formatCOP(item.grossAmount)}</p>
+                  <p className="text-slate-400 text-xs">
+                    Wompi {formatCOP(item.wompiFee)} · Neto <span className="text-emerald-600 font-medium">{formatCOP(item.netAmount)}</span>
+                  </p>
+                </>
               ) : (
-                <p className="text-slate-400 font-medium text-sm">Sin monto</p>
+                <p className="text-slate-400 font-medium text-sm">Sin registro de pago</p>
               )}
-              {item.date ? (
-                <p className="text-slate-400 text-xs">{formatDate(item.date)}</p>
-              ) : (
-                <p className="text-slate-400 text-xs">Sin registro de pago</p>
-              )}
+              {item.date && <p className="text-slate-400 text-xs">{formatDate(item.date)}</p>}
             </div>
           </div>
         </Link>

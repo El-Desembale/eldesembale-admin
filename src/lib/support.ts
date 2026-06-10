@@ -15,6 +15,15 @@ import { db } from './firebase';
 
 export type SupportSource = 'web_app' | 'mobile_app';
 export type SupportSenderRole = 'customer' | 'admin';
+export type SupportAttachmentKind = 'image' | 'file';
+
+export interface SupportAttachment {
+  name: string;
+  url: string;
+  contentType: string;
+  size: number;
+  kind: SupportAttachmentKind;
+}
 
 export interface SupportThread {
   id: string;
@@ -34,6 +43,7 @@ export interface SupportThread {
 export interface SupportMessage {
   id: string;
   text: string;
+  attachments: SupportAttachment[];
   senderRole: SupportSenderRole;
   senderName: string;
   source: SupportSource | 'admin';
@@ -63,9 +73,26 @@ function parseThread(id: string, data: Record<string, unknown>): SupportThread {
 }
 
 function parseMessage(id: string, data: Record<string, unknown>): SupportMessage {
+  const rawAttachments = Array.isArray(data.attachments) ? data.attachments : [];
   return {
     id,
     text: (data.text as string) || '',
+    attachments: rawAttachments
+      .map((item) => {
+        if (!item || typeof item !== 'object') return null;
+        const attachment = item as Record<string, unknown>;
+        const url = typeof attachment.url === 'string' ? attachment.url : '';
+        const name = typeof attachment.name === 'string' ? attachment.name : '';
+        if (!url || !name) return null;
+        return {
+          name,
+          url,
+          contentType: typeof attachment.contentType === 'string' ? attachment.contentType : '',
+          size: typeof attachment.size === 'number' ? attachment.size : 0,
+          kind: attachment.kind === 'image' ? 'image' : 'file',
+        } satisfies SupportAttachment;
+      })
+      .filter((item): item is SupportAttachment => Boolean(item)),
     senderRole: ((data.senderRole as SupportSenderRole) || 'customer'),
     senderName: (data.senderName as string) || '',
     source: ((data.source as SupportSource | 'admin') || 'web_app'),
