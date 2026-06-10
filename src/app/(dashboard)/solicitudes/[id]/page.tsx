@@ -22,12 +22,61 @@ const ACTION_STATUSES: { label: string; value: LoanRequest['status']; color: str
   { label: 'Desembolsar',  value: 'disbursed', color: 'bg-[#7d977d]/16 text-[#4f684f] border-[#bad0ba] hover:bg-[#7d977d]/22' },
 ];
 
+const PRESET_REJECTION_REASONS = [
+  'Los documentos cargados no coinciden con la información suministrada.',
+  'La solicitud no cumple con las políticas internas de aprobación.',
+  'No fue posible validar la identidad del solicitante.',
+  'La información financiera suministrada está incompleta o inconsistente.',
+  'El historial de pago o el perfil de riesgo no permite aprobar la solicitud.',
+] as const;
+
 const DOCUMENT_ITEMS = [
   { key: 'ccFrontalPicture', label: 'Cedula frontal', helper: 'Documento principal' },
   { key: 'ccBackPicture', label: 'Cedula respaldo', helper: 'Cara posterior del documento' },
   { key: 'selfiePicture', label: 'Selfie', helper: 'Validacion facial del solicitante' },
   { key: 'empInvoiceFile', label: 'Comprobante', helper: 'Factura o soporte laboral' },
 ] as const;
+
+const BANK_FIELD_LABELS: Record<string, string> = {
+  bank_name: 'Nombre del banco',
+  bank_document_number: 'Número de documento',
+  bank_account_number: 'Número de cuenta',
+  bank_account_name: 'Nombre del titular',
+  account_type: 'Tipo de cuenta',
+  bank_document_type: 'Tipo de documento',
+  bank_account_last_name: 'Apellido del titular',
+  'bank name': 'Nombre del banco',
+  'bank document number': 'Número de documento',
+  'bank account number': 'Número de cuenta',
+  'bank account name': 'Nombre del titular',
+  'account type': 'Tipo de cuenta',
+  'bank document type': 'Tipo de documento',
+  'bank account last name': 'Apellido del titular',
+  bankName: 'Nombre del banco',
+  bankDocumentNumber: 'Número de documento',
+  bankAccountNumber: 'Número de cuenta',
+  bankAccountName: 'Nombre del titular',
+  accountType: 'Tipo de cuenta',
+  bankDocumentType: 'Tipo de documento',
+  bankAccountLastName: 'Apellido del titular',
+};
+
+function getBankFieldLabel(key: string) {
+  const normalizedKey = key
+    .replace(/([a-z])([A-Z])/g, '$1 $2')
+    .replace(/_/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
+
+  if (BANK_FIELD_LABELS[key]) return BANK_FIELD_LABELS[key];
+  if (BANK_FIELD_LABELS[normalizedKey]) return BANK_FIELD_LABELS[normalizedKey];
+
+  return key
+    .replace(/([a-z])([A-Z])/g, '$1 $2')
+    .replace(/_/g, ' ')
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+}
 
 function parseLoanFromFirestore(id: string, data: Record<string, unknown>): LoanRequest {
   const createdAt = data.created_at instanceof Timestamp ? data.created_at.toDate() : new Date();
@@ -65,6 +114,7 @@ export default function LoanDetailPage() {
   const [showReminder, setShowReminder] = useState(false);
   const [showDisbursement, setShowDisbursement] = useState(false);
   const [showReject, setShowReject] = useState(false);
+  const [selectedRejectReason, setSelectedRejectReason] = useState<string>(PRESET_REJECTION_REASONS[0]);
   const [rejectReason, setRejectReason] = useState('');
   const [updating, setUpdating] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -114,6 +164,15 @@ export default function LoanDetailPage() {
     };
     fetchLoan();
   }, [id, router]);
+
+  const isCustomRejectReason = selectedRejectReason === 'custom';
+  const finalRejectReason = isCustomRejectReason ? rejectReason.trim() : selectedRejectReason.trim();
+
+  const resetRejectForm = () => {
+    setShowReject(false);
+    setSelectedRejectReason(PRESET_REJECTION_REASONS[0]);
+    setRejectReason('');
+  };
 
   const handleStatusChange = async (status: LoanRequest['status'], proofUrl?: string, reason?: string) => {
     if (!loan || updating) return;
@@ -185,7 +244,11 @@ export default function LoanDetailPage() {
     } finally {
       setUpdating(false);
       setShowDisbursement(false);
-      setShowReject(false);
+      if (status === 'rejected') {
+        resetRejectForm();
+      } else {
+        setShowReject(false);
+      }
     }
   };
 
@@ -325,9 +388,10 @@ export default function LoanDetailPage() {
               <p className="text-slate-400 text-xs mb-2">Resumen del crédito</p>
               <div className="grid gap-1.5 text-sm">
                 <div className="flex justify-between"><span className="text-slate-500">Capital</span><span className="text-slate-900 font-medium">{fmt(p.capital)}</span></div>
-                <div className="flex justify-between"><span className="text-slate-500">Costos del crédito (interés + plataforma + admin.)</span><span className="text-slate-900 font-medium">{fmt(costos)}</span></div>
-                <div className="flex justify-between"><span className="text-slate-500">Comisión Wompi</span><span className="text-slate-900 font-medium">{fmt(p.wompiTotal)}</span></div>
-                <div className="flex justify-between border-t border-slate-100 pt-1.5"><span className="text-slate-700 font-semibold">Total cobrado al cliente</span><span className="text-emerald-600 font-bold">{fmt(p.totalCliente)}</span></div>
+                <div className="flex justify-between"><span className="text-slate-500">Intereses (interés + plataforma + admin.)</span><span className="text-slate-900 font-medium">{fmt(costos)}</span></div>
+                <div className="flex justify-between"><span className="text-slate-500">Total comisiones Wompi</span><span className="text-red-500 font-medium">{fmt(p.wompiTotal)}</span></div>
+                <div className="flex justify-between border-t border-slate-100 pt-1.5"><span className="text-slate-700 font-semibold">Total cobrado al cliente</span><span className="text-slate-900 font-bold">{fmt(p.totalCliente)}</span></div>
+                <div className="flex justify-between"><span className="text-slate-700 font-semibold">Ganancia neta del préstamo</span><span className="text-emerald-600 font-bold">{fmt(p.totalCliente - p.capital - p.wompiTotal)}</span></div>
               </div>
               <div className="mt-2 grid grid-cols-3 gap-2 text-xs text-slate-500">
                 <div className="rounded-lg bg-slate-50 border border-slate-100 px-2 py-1.5"><p className="text-[10px] uppercase tracking-wide">Interés</p><p className="text-slate-800 font-medium">{fmt(p.interesTotal)}</p></div>
@@ -399,7 +463,7 @@ export default function LoanDetailPage() {
           <div className="grid grid-cols-2 gap-2 text-sm">
             {Object.entries(bank).map(([key, val]) => (
               <div key={key}>
-                <p className="text-slate-400 text-xs capitalize">{key.replace(/_/g, ' ')}</p>
+                <p className="text-slate-400 text-xs">{getBankFieldLabel(key)}</p>
                 <p className="text-slate-900">{val}</p>
               </div>
             ))}
@@ -584,29 +648,63 @@ export default function LoanDetailPage() {
                 <span className="text-2xl">❌</span>
                 <h2 className="text-slate-900 font-bold text-lg">Rechazar solicitud</h2>
               </div>
-              <button onClick={() => { setShowReject(false); setRejectReason(''); }} className="text-slate-400 hover:text-slate-600 text-2xl leading-none">×</button>
+              <button onClick={resetRejectForm} className="text-slate-400 hover:text-slate-600 text-2xl leading-none">×</button>
             </div>
-            <p className="text-slate-500 text-sm">Indica el motivo del rechazo. Este mensaje se le enviará y mostrará al cliente.</p>
-            <textarea
-              value={rejectReason}
-              onChange={e => setRejectReason(e.target.value)}
-              rows={4}
-              maxLength={400}
-              placeholder="Ej: Los documentos no coinciden con los datos suministrados."
-              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-slate-900 text-sm placeholder-slate-400 focus:outline-none focus:border-rose-400 focus:ring-1 focus:ring-rose-400 transition-colors resize-none"
-            />
-            <p className="text-slate-400 text-xs -mt-2">{rejectReason.length}/400</p>
+            <p className="text-slate-500 text-sm">Selecciona un motivo frecuente o redacta uno personalizado. Este mensaje se le enviará y mostrará al cliente.</p>
+            <div className="grid gap-2">
+              {PRESET_REJECTION_REASONS.map((reason) => {
+                const selected = selectedRejectReason === reason;
+                return (
+                  <button
+                    key={reason}
+                    type="button"
+                    onClick={() => setSelectedRejectReason(reason)}
+                    className={`rounded-xl border px-4 py-3 text-left text-sm transition-colors ${
+                      selected
+                        ? 'border-rose-300 bg-rose-50 text-rose-700'
+                        : 'border-slate-200 bg-slate-50 text-slate-700 hover:border-slate-300'
+                    }`}
+                  >
+                    {reason}
+                  </button>
+                );
+              })}
+              <button
+                type="button"
+                onClick={() => setSelectedRejectReason('custom')}
+                className={`rounded-xl border px-4 py-3 text-left text-sm transition-colors ${
+                  isCustomRejectReason
+                    ? 'border-rose-300 bg-rose-50 text-rose-700'
+                    : 'border-slate-200 bg-slate-50 text-slate-700 hover:border-slate-300'
+                }`}
+              >
+                Otro motivo
+              </button>
+            </div>
+            {isCustomRejectReason && (
+              <>
+                <textarea
+                  value={rejectReason}
+                  onChange={e => setRejectReason(e.target.value)}
+                  rows={4}
+                  maxLength={400}
+                  placeholder="Ej: Los documentos no coinciden con los datos suministrados."
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-slate-900 text-sm placeholder-slate-400 focus:outline-none focus:border-rose-400 focus:ring-1 focus:ring-rose-400 transition-colors resize-none"
+                />
+                <p className="text-slate-400 text-xs -mt-2">{rejectReason.length}/400</p>
+              </>
+            )}
             <div className="flex gap-3">
               <button
-                onClick={() => { setShowReject(false); setRejectReason(''); }}
+                onClick={resetRejectForm}
                 disabled={updating}
                 className="flex-1 py-2.5 rounded-xl text-sm font-medium border border-slate-200 text-slate-500 hover:bg-slate-50 transition-colors disabled:opacity-50"
               >
                 Cancelar
               </button>
               <button
-                onClick={() => handleStatusChange('rejected', undefined, rejectReason.trim())}
-                disabled={updating || rejectReason.trim().length < 5}
+                onClick={() => handleStatusChange('rejected', undefined, finalRejectReason)}
+                disabled={updating || finalRejectReason.length < 5}
                 className="flex-1 py-2.5 rounded-xl text-sm font-medium bg-rose-600 text-white hover:bg-rose-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {updating ? 'Rechazando...' : 'Rechazar y notificar'}

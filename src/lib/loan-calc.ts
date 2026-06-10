@@ -117,6 +117,20 @@ export function grossUpWompi(cuotaCredito: number, wompi: WompiFees): number {
 }
 
 /**
+ * Comisión de Wompi (tarifa variable + fija, con IVA) sobre un monto bruto cobrado al cliente.
+ * Se usa para registrar `wompi_fee` en transacciones sin desglose persistido (suscripciones
+ * y cuotas legacy).
+ */
+export function wompiFeeFromGross(
+  gross: number,
+  wompi: WompiFees = DEFAULT_PRICING_CONFIG.wompi,
+): number {
+  if (gross <= 0) return 0;
+  const ivaFactor = 1 + wompi.iva;
+  return Math.round(gross * wompi.porcentaje * ivaFactor + wompi.fijo * ivaFactor);
+}
+
+/**
  * Calcula el desglose completo del crédito. Redondea cada concepto a pesos enteros y ajusta
  * las diferencias por redondeo en la última cuota, de modo que la suma de las cuotas coincida
  * exactamente con los totales.

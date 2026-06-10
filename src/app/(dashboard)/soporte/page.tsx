@@ -7,6 +7,7 @@ import {
   sendAdminSupportMessage,
   subscribeToSupportMessages,
   subscribeToSupportThreads,
+  type SupportAttachment,
   type SupportMessage,
   type SupportThread,
 } from '@/lib/support';
@@ -27,6 +28,18 @@ function sourceLabel(sources: string[]) {
   if (hasWeb && hasApp) return 'App + Web';
   if (hasApp) return 'App';
   return 'Web';
+}
+
+function formatBytes(size: number) {
+  if (!size) return '0 B';
+  const units = ['B', 'KB', 'MB', 'GB'];
+  const index = Math.min(Math.floor(Math.log(size) / Math.log(1024)), units.length - 1);
+  const value = size / 1024 ** index;
+  return `${value >= 10 || index === 0 ? value.toFixed(0) : value.toFixed(1)} ${units[index]}`;
+}
+
+function isImageAttachment(attachment: SupportAttachment) {
+  return attachment.kind === 'image' || attachment.contentType.startsWith('image/');
 }
 
 export default function SupportPage() {
@@ -233,7 +246,51 @@ export default function SupportPage() {
                         <p className={`text-xs ${isAdmin ? 'text-blue-100' : 'text-slate-500'}`}>
                           {isAdmin ? message.senderName || 'Admin' : message.senderName || 'Cliente'}
                         </p>
-                        <p className="mt-2 text-sm leading-6">{message.text}</p>
+                        {message.text ? <p className="mt-2 text-sm leading-6">{message.text}</p> : null}
+                        {message.attachments.length > 0 ? (
+                          <div className="mt-3 grid gap-3">
+                            {message.attachments.map((attachment) =>
+                              isImageAttachment(attachment) ? (
+                                <a
+                                  key={attachment.url}
+                                  href={attachment.url}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="block"
+                                >
+                                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                                  <img
+                                    src={attachment.url}
+                                    alt={attachment.name}
+                                    className="max-h-72 w-full rounded-2xl object-cover"
+                                  />
+                                </a>
+                              ) : (
+                                <a
+                                  key={attachment.url}
+                                  href={attachment.url}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className={`flex items-center justify-between gap-3 rounded-2xl px-4 py-3 text-sm ${
+                                    isAdmin
+                                      ? 'bg-blue-500/30 text-white'
+                                      : 'border border-slate-200 bg-slate-50 text-slate-700'
+                                  }`}
+                                >
+                                  <div className="min-w-0">
+                                    <p className="truncate font-semibold">{attachment.name}</p>
+                                    <p className={`mt-1 text-xs ${isAdmin ? 'text-blue-100' : 'text-slate-400'}`}>
+                                      {formatBytes(attachment.size)}
+                                    </p>
+                                  </div>
+                                  <span className="shrink-0 text-xs font-semibold uppercase tracking-[0.18em]">
+                                    Abrir
+                                  </span>
+                                </a>
+                              ),
+                            )}
+                          </div>
+                        ) : null}
                         <p className={`mt-3 text-[11px] ${isAdmin ? 'text-blue-100' : 'text-slate-400'}`}>
                           {formatDate(message.createdAt)}
                         </p>
