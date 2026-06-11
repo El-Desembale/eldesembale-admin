@@ -424,60 +424,10 @@ function FinancialOverview({ finance, period, totalCapital, onSaveBudget }: { fi
 
   return (
     <div className="flex flex-col gap-6">
-      {/* Presupuesto disponible */}
-      <div className={`border rounded-2xl p-6 shadow-sm ${availableFunds <= 0 && totalCapital > 0 ? 'bg-red-50 border-red-200' : 'bg-white border-slate-200'}`}>
-        <div className="flex items-start justify-between">
-          <div>
-            <p className="text-slate-500 text-sm mb-1">Fondos disponibles para prestar</p>
-            <p className={`font-bold text-4xl ${availableFunds <= 0 && totalCapital > 0 ? 'text-red-500' : 'text-blue-600'}`}>
-              {totalCapital > 0 ? formatCOP(availableFunds) : 'Sin configurar'}
-            </p>
-            <p className="text-slate-400 text-xs mt-2">
-              Capital total: {formatCOP(totalCapital)} − Prestado: {formatCOP(finance.capitalLent)} + Recuperado: {formatCOP(finance.capitalRecovered)}
-            </p>
-          </div>
-          {!editingBudget && (
-            <button
-              onClick={() => { setEditingBudget(true); setBudgetInput(totalCapital > 0 ? String(totalCapital) : ''); }}
-              className="text-blue-600 text-sm hover:underline whitespace-nowrap font-medium"
-            >
-              {totalCapital > 0 ? 'Editar capital' : 'Configurar'}
-            </button>
-          )}
-        </div>
-        {editingBudget && (
-          <div className="mt-4 pt-4 border-t border-slate-200">
-            <p className="text-slate-400 text-xs mb-2">Capital total disponible para préstamos</p>
-            <div className="flex gap-2">
-              <input
-                type="text"
-                value={budgetInput}
-                onChange={e => setBudgetInput(e.target.value.replace(/[^0-9]/g, ''))}
-                placeholder="Ej: 5000000"
-                className="flex-1 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-slate-900 text-sm placeholder-slate-400 focus:outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400"
-              />
-              <button
-                onClick={handleBudgetSave}
-                disabled={savingBudget}
-                className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
-              >
-                {savingBudget ? '...' : 'Guardar'}
-              </button>
-              <button
-                onClick={() => setEditingBudget(false)}
-                className="text-slate-400 px-3 py-2 text-sm hover:text-slate-600"
-              >
-                Cancelar
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* ── Utilidad: cascada ingresos − costos = utilidad (resultado acumulado) ── */}
+      {/* ── GANANCIA: intereses recolectados + suscripciones − Wompi ── */}
       <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
         <div className="flex items-center justify-between mb-1">
-          <p className="text-slate-500 text-sm">Utilidad neta · lo que ya ganaste</p>
+          <p className="text-slate-500 text-sm">Ganancia · lo que ya ganaste</p>
           <span className="text-[11px] text-slate-400 bg-slate-50 border border-slate-200 rounded-full px-2 py-0.5">Acumulado</span>
         </div>
         <p className={`font-bold text-4xl mb-5 ${finance.netProfit >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>
@@ -485,49 +435,108 @@ function FinancialOverview({ finance, period, totalCapital, onSaveBudget }: { fi
         </p>
 
         <div className="flex flex-col gap-2 text-sm">
-          <p className="text-slate-400 text-[11px] font-semibold uppercase tracking-wider">Ingresos cobrados</p>
-          <CascadeRow label="Intereses cobrados" value={finance.interestCollected} sign="+" />
+          <CascadeRow label="Intereses recolectados" value={finance.interestCollected} sign="+" />
           <CascadeRow label="Suscripciones cobradas" value={finance.subscriptionGross} sign="+" />
-          <div className="flex justify-between items-center border-t border-slate-100 pt-2">
-            <span className="text-slate-600 font-medium">Total ingresos</span>
-            <span className="text-slate-900 font-semibold">{formatCOP(finance.interestCollected + finance.subscriptionGross)}</span>
-          </div>
-
-          <p className="text-slate-400 text-[11px] font-semibold uppercase tracking-wider mt-3">Costos</p>
-          <CascadeRow label="Comisiones Wompi" value={finance.totalWompi} sign="−" />
-
+          <CascadeRow label="Comisiones Wompi (gasto operativo)" value={finance.totalWompi} sign="−" />
           <div className="flex justify-between items-center border-t-2 border-slate-200 pt-3 mt-1">
-            <span className="text-slate-900 font-bold">Utilidad neta</span>
+            <span className="text-slate-900 font-bold">Ganancia</span>
             <span className={`font-bold text-lg ${finance.netProfit >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>{formatCOP(finance.netProfit)}</span>
           </div>
         </div>
+
+        <div className="flex justify-between items-center mt-4 pt-3 border-t border-dashed border-slate-200">
+          <span className="text-slate-500 text-sm">Ganancia estimada al cierre <span className="text-slate-400">· si todos pagan</span></span>
+          <span className="text-blue-600 font-semibold">{formatCOP(finance.estimatedProfitAtClose)}</span>
+        </div>
         <p className="text-slate-400 text-xs mt-3">
-          Solo cuenta lo ya cobrado. El capital prestado no es ingreso ni ganancia (va más abajo).
+          El capital es dinero que rota, no ganancia. Wompi es gasto operativo, tampoco es ganancia.
         </p>
       </div>
 
-      {/* ── Proyección al cierre ── */}
-      <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
-        <p className="text-slate-500 text-sm mb-3">Proyección · si todos los créditos se pagan completos</p>
-        <div className="flex flex-col gap-2 text-sm">
-          <CascadeRow label="Utilidad ya ganada (hoy)" value={finance.netProfit} sign="+" />
-          <CascadeRow label="Intereses por cobrar" value={finance.pendingInterest} sign="+" />
-          <CascadeRow label="Comisiones Wompi por pagar" value={finance.pendingWompi} sign="−" />
-          <div className="flex justify-between items-center border-t-2 border-slate-200 pt-3 mt-1">
-            <span className="text-slate-900 font-bold">Utilidad estimada al cierre</span>
-            <span className={`font-bold text-lg ${finance.estimatedProfitAtClose >= 0 ? 'text-blue-600' : 'text-red-500'}`}>{formatCOP(finance.estimatedProfitAtClose)}</span>
+      {/* ── CAPITAL · el dinero que está rotando (no es ganancia) ── */}
+      <div>
+        <h3 className="text-slate-700 font-semibold mb-3 text-xs uppercase tracking-wider">Capital · el dinero que está rotando</h3>
+        <div className={`border rounded-2xl p-5 shadow-sm ${availableFunds <= 0 && totalCapital > 0 ? 'bg-red-50 border-red-200' : 'bg-white border-slate-200'}`}>
+          <div className="flex items-start justify-between">
+            <div>
+              <p className="text-slate-500 text-sm mb-1">Disponible para prestar</p>
+              <p className={`font-bold text-3xl ${availableFunds <= 0 && totalCapital > 0 ? 'text-red-500' : 'text-blue-600'}`}>
+                {totalCapital > 0 ? formatCOP(availableFunds) : 'Sin configurar'}
+              </p>
+              {totalCapital > 0 && (
+                <p className="text-slate-400 text-xs mt-1">Capital total {formatCOP(totalCapital)} − prestado + recuperado</p>
+              )}
+            </div>
+            {!editingBudget && (
+              <button
+                onClick={() => { setEditingBudget(true); setBudgetInput(totalCapital > 0 ? String(totalCapital) : ''); }}
+                className="text-blue-600 text-sm hover:underline whitespace-nowrap font-medium"
+              >
+                {totalCapital > 0 ? 'Editar' : 'Configurar'}
+              </button>
+            )}
+          </div>
+          {editingBudget && (
+            <div className="mt-4 pt-4 border-t border-slate-200">
+              <p className="text-slate-400 text-xs mb-2">Capital total disponible para préstamos</p>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={budgetInput}
+                  onChange={e => setBudgetInput(e.target.value.replace(/[^0-9]/g, ''))}
+                  placeholder="Ej: 5000000"
+                  className="flex-1 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-slate-900 text-sm placeholder-slate-400 focus:outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400"
+                />
+                <button
+                  onClick={handleBudgetSave}
+                  disabled={savingBudget}
+                  className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
+                >
+                  {savingBudget ? '...' : 'Guardar'}
+                </button>
+                <button
+                  onClick={() => setEditingBudget(false)}
+                  className="text-slate-400 px-3 py-2 text-sm hover:text-slate-600"
+                >
+                  Cancelar
+                </button>
+              </div>
+            </div>
+          )}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-4 pt-4 border-t border-slate-100">
+            <CapItem label="Prestado" value={formatCOP(finance.capitalLent)} sublabel={`${finance.approvedLoansCount} préstamos · ya se desembolsó`} />
+            <CapItem label="Recuperado" value={formatCOP(finance.capitalRecovered)} sublabel="ya volvió en cuotas" valueClass="text-emerald-600" />
+            <CapItem label="Pendiente por recuperar" value={formatCOP(finance.capitalPending)} sublabel={finance.moraCount > 0 ? `${finance.moraCount} en mora · ${formatCOP(finance.capitalAtRisk)} en riesgo` : 'al día'} valueClass="text-yellow-600" />
           </div>
         </div>
       </div>
 
-      {/* ── Capital (no es ganancia) ── */}
+      {/* ── INTERÉS · es ganancia ── */}
       <div>
-        <h3 className="text-slate-700 font-semibold mb-3 text-xs uppercase tracking-wider">Capital · no es ganancia</h3>
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-          <MetricCard label="Capital prestado" value={formatCOP(finance.capitalLent)} sublabel={`${finance.approvedLoansCount} préstamos activos`} color="text-slate-900" />
-          <MetricCard label="Recuperado" value={formatCOP(finance.capitalRecovered)} sublabel="Ya devuelto en cuotas" color="text-emerald-600" />
-          <MetricCard label="Afuera (por recuperar)" value={formatCOP(finance.capitalPending)} color="text-yellow-600" />
-          <MetricCard label="En riesgo" value={formatCOP(finance.capitalAtRisk)} sublabel={`${finance.moraCount} en mora`} color={finance.moraCount > 0 ? 'text-orange-500' : 'text-slate-900'} />
+        <h3 className="text-slate-700 font-semibold mb-3 text-xs uppercase tracking-wider">Interés · es ganancia</h3>
+        <div className="grid grid-cols-2 gap-3">
+          <MetricCard label="Recolectado" value={formatCOP(finance.interestCollected)} sublabel="ya cobrado · suma a la ganancia" color="text-emerald-600" />
+          <MetricCard label="Pendiente" value={formatCOP(finance.pendingInterest)} sublabel="por cobrar" color="text-yellow-600" />
+        </div>
+      </div>
+
+      {/* ── SUSCRIPCIONES · es ganancia ── */}
+      <div>
+        <h3 className="text-slate-700 font-semibold mb-3 text-xs uppercase tracking-wider">Suscripciones · es ganancia</h3>
+        <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
+          <MetricCard label="Cobradas (bruto)" value={formatCOP(finance.subscriptionGross)} sublabel="suma a la ganancia" color="text-emerald-600" />
+          <MetricCard label="Netas" value={formatCOP(finance.subscriptionNet)} sublabel="después de Wompi" color="text-slate-900" />
+          <MetricCard label="Suscritos" value={String(finance.subscribedCount)} color="text-slate-900" />
+        </div>
+      </div>
+
+      {/* ── WOMPI · gasto operativo (no es ganancia) ── */}
+      <div>
+        <h3 className="text-slate-700 font-semibold mb-3 text-xs uppercase tracking-wider">Wompi · gasto operativo (no es ganancia)</h3>
+        <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
+          <MetricCard label="Comisión por pagos" value={formatCOP(finance.wompiInstallments)} sublabel="de cuotas pagadas" color="text-red-500" />
+          <MetricCard label="Comisión por suscripciones" value={formatCOP(finance.wompiSubscriptions)} color="text-red-500" />
+          <MetricCard label="Total Wompi" value={formatCOP(finance.totalWompi)} color="text-red-500" />
         </div>
       </div>
 
@@ -569,6 +578,17 @@ function MetricCard({ label, value, sublabel, color = 'text-slate-900' }: { labe
       <p className="text-slate-400 text-xs">{label}</p>
       <p className={`${color} font-bold text-lg`}>{value}</p>
       {sublabel && <p className="text-slate-400 text-xs mt-0.5">{sublabel}</p>}
+    </div>
+  );
+}
+
+// Sub-métrica dentro del panel de Capital (sin tarjeta propia).
+function CapItem({ label, value, sublabel, valueClass = 'text-slate-900' }: { label: string; value: string; sublabel?: string; valueClass?: string }) {
+  return (
+    <div>
+      <p className="text-slate-400 text-xs">{label}</p>
+      <p className={`${valueClass} font-bold text-base`}>{value}</p>
+      {sublabel && <p className="text-slate-400 text-[11px] mt-0.5">{sublabel}</p>}
     </div>
   );
 }
