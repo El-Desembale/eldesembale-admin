@@ -429,34 +429,48 @@ function FinancialOverview({ finance, period, totalCapital, onSaveBudget }: { fi
     setSavingBudget(false);
   };
 
+  // Ganancia = intereses + suscripciones. Wompi (gasto operativo) y capital van aparte.
+  const gananciaActual = finance.interestCollected + finance.subscriptionGross;
+  const gananciaProyectada = gananciaActual + finance.pendingInterest;
+
   return (
     <div className="flex flex-col gap-6">
-      {/* ── GANANCIA: intereses recolectados + suscripciones − Wompi ── */}
+      {/* ── GANANCIA: actual y proyectada (intereses + suscripciones) ── */}
       <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
+        {/* Ganancia actual */}
         <div className="flex items-center justify-between mb-1">
-          <p className="text-slate-500 text-sm">Ganancia · lo que ya ganaste</p>
-          <span className="text-[11px] text-slate-400 bg-slate-50 border border-slate-200 rounded-full px-2 py-0.5">Acumulado</span>
+          <p className="text-slate-500 text-sm">Ganancia actual · ya pagada</p>
+          <span className="text-[11px] text-slate-400 bg-slate-50 border border-slate-200 rounded-full px-2 py-0.5">Hoy</span>
         </div>
-        <p className={`font-bold text-4xl mb-5 ${finance.netProfit >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>
-          {formatCOP(finance.netProfit)}
-        </p>
-
+        <p className="font-bold text-4xl mb-4 text-emerald-600">{formatCOP(gananciaActual)}</p>
         <div className="flex flex-col gap-2 text-sm">
-          <CascadeRow label="Intereses recolectados" value={finance.interestCollected} sign="+" />
-          <CascadeRow label="Suscripciones cobradas" value={finance.subscriptionGross} sign="+" />
-          <CascadeRow label="Comisiones Wompi (gasto operativo)" value={finance.totalWompi} sign="−" />
+          <CascadeRow label="Suscripciones pagadas" value={finance.subscriptionGross} sign="+" />
+          <CascadeRow label="Intereses pagados" value={finance.interestCollected} sign="+" />
           <div className="flex justify-between items-center border-t-2 border-slate-200 pt-3 mt-1">
-            <span className="text-slate-900 font-bold">Ganancia</span>
-            <span className={`font-bold text-lg ${finance.netProfit >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>{formatCOP(finance.netProfit)}</span>
+            <span className="text-slate-900 font-bold">Ganancia actual</span>
+            <span className="font-bold text-lg text-emerald-600">{formatCOP(gananciaActual)}</span>
           </div>
         </div>
 
-        <div className="flex justify-between items-center mt-4 pt-3 border-t border-dashed border-slate-200">
-          <span className="text-slate-500 text-sm">Ganancia estimada al cierre <span className="text-slate-400">· si todos pagan</span></span>
-          <span className="text-blue-600 font-semibold">{formatCOP(finance.estimatedProfitAtClose)}</span>
+        {/* Ganancia proyectada */}
+        <div className="mt-5 pt-5 border-t border-dashed border-slate-200">
+          <div className="flex items-center justify-between mb-1">
+            <p className="text-slate-500 text-sm">Ganancia proyectada · si se cobra todo lo pendiente</p>
+            <span className="text-[11px] text-blue-500 bg-blue-50 border border-blue-200 rounded-full px-2 py-0.5">Proyección</span>
+          </div>
+          <p className="font-bold text-3xl mb-3 text-blue-600">{formatCOP(gananciaProyectada)}</p>
+          <div className="flex flex-col gap-2 text-sm">
+            <CascadeRow label="Ganancia actual" value={gananciaActual} sign="+" />
+            <CascadeRow label="Intereses pendientes" value={finance.pendingInterest} sign="+" />
+            <div className="flex justify-between items-center border-t border-slate-200 pt-2">
+              <span className="text-slate-700 font-semibold">Ganancia proyectada</span>
+              <span className="font-bold text-blue-600">{formatCOP(gananciaProyectada)}</span>
+            </div>
+          </div>
         </div>
-        <p className="text-slate-400 text-xs mt-3">
-          El capital es dinero que rota, no ganancia. Wompi es gasto operativo, tampoco es ganancia.
+
+        <p className="text-slate-400 text-xs mt-4">
+          Ganancia = intereses + suscripciones. El capital es dinero que rota y Wompi es gasto operativo: van aparte, no entran en la ganancia.
         </p>
       </div>
 
