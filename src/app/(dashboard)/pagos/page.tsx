@@ -168,8 +168,14 @@ export default function PagosPage() {
     const subs = approved.filter(p => p.type === 'subscription');
     const sum = (arr: Payment[], key: 'grossAmount' | 'wompiFee' | 'netAmount') =>
       arr.reduce((s, p) => s + p[key], 0);
+    const fmtD = (s: string) => new Date(`${s}T00:00:00`).toLocaleDateString('es-CO', { day: '2-digit', month: 'short' });
+    let rangeLabel = '';
+    if (fromDate && toDate) rangeLabel = `${fmtD(fromDate)} – ${fmtD(toDate)}`;
+    else if (fromDate) rangeLabel = `desde ${fmtD(fromDate)}`;
+    else if (toDate) rangeLabel = `hasta ${fmtD(toDate)}`;
     return {
       isFiltered: !!(fromDate || toDate),
+      rangeLabel,
       count: approved.length,
       grossTotal: sum(approved, 'grossAmount'),
       wompiTotal: sum(approved, 'wompiFee'),
@@ -396,6 +402,7 @@ interface FinanceData {
 
 interface PeriodSummary {
   isFiltered: boolean;
+  rangeLabel: string;
   count: number;
   grossTotal: number;
   wompiTotal: number;
@@ -540,21 +547,23 @@ function FinancialOverview({ finance, period, totalCapital, onSaveBudget }: { fi
         </div>
       </div>
 
-      {/* ── Movimiento de caja en el período (pagos registrados, sensible al filtro) ── */}
-      <div>
-        <h3 className="text-slate-700 font-semibold mb-3 text-xs uppercase tracking-wider">
-          {period.isFiltered ? 'Caja · recaudado en el período' : 'Caja · recaudado (pagos registrados)'}
-        </h3>
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-          <MetricCard label="Bruto recaudado" value={formatCOP(period.grossTotal)} sublabel={`${period.count} transacciones`} color="text-slate-900" />
-          <MetricCard label="Comisiones Wompi" value={formatCOP(period.wompiTotal)} color="text-red-500" />
-          <MetricCard label="Neto recibido" value={formatCOP(period.netTotal)} color="text-emerald-600" />
-          <MetricCard label="Cuotas / Suscripciones" value={`${period.installmentCount} / ${period.subscriptionCount}`} sublabel={`${formatCOP(period.installmentGross)} · ${formatCOP(period.subscriptionGross)}`} color="text-slate-900" />
+      {/* ── Entró en caja en el rango de fechas seleccionado (solo con filtro activo) ── */}
+      {period.isFiltered && (
+        <div>
+          <h3 className="text-slate-700 font-semibold mb-3 text-xs uppercase tracking-wider">
+            Entró en caja · {period.rangeLabel}
+          </h3>
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+            <MetricCard label="Total recibido" value={formatCOP(period.grossTotal)} sublabel={`${period.count} pagos en el rango`} color="text-emerald-600" />
+            <MetricCard label="En cuotas" value={formatCOP(period.installmentGross)} sublabel={`${period.installmentCount} pagos · capital + interés`} color="text-slate-900" />
+            <MetricCard label="En suscripciones" value={formatCOP(period.subscriptionGross)} sublabel={`${period.subscriptionCount} pagos`} color="text-slate-900" />
+            <MetricCard label="Comisión Wompi del rango" value={formatCOP(period.wompiTotal)} sublabel={`Neto: ${formatCOP(period.netTotal)}`} color="text-red-500" />
+          </div>
+          <p className="text-slate-400 text-xs mt-2">
+            Dinero que efectivamente entró en las fechas elegidas. Incluye capital recuperado, por eso no es lo mismo que la ganancia.
+          </p>
         </div>
-        {!period.isFiltered && (
-          <p className="text-slate-400 text-xs mt-2">Usa el filtro de fechas (arriba) para ver lo recaudado en un rango específico.</p>
-        )}
-      </div>
+      )}
     </div>
   );
 }
