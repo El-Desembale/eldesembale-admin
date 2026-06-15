@@ -102,12 +102,14 @@ export const STATUS_COLORS: Record<LoanStatus, string> = {
 
 // Payment types
 export type PaymentType = 'subscription' | 'installment';
-export type PaymentStatus = 'APPROVED' | 'DECLINED' | 'ERROR';
+export type PaymentStatus = 'APPROVED' | 'DECLINED' | 'ERROR' | 'PENDING_REVIEW';
+export type PaymentSource = 'wompi' | 'manual';
 
 export interface Payment {
   id: string;
   reference: string;
   type: PaymentType;
+  source: PaymentSource;
   status: PaymentStatus;
   amount: number;
   amountInCents: number;
@@ -123,19 +125,26 @@ export interface Payment {
   userName: string;
   loanId: string | null;
   installmentNumber: number | null;
+  installmentsToPay: number;
+  proofUrl?: string;
+  proofName?: string;
+  proofContentType?: string;
   createdAt: Date;
+  reviewedAt?: Date | null;
 }
 
 export const PAYMENT_STATUS_LABELS: Record<PaymentStatus, string> = {
   APPROVED: 'Aprobado',
   DECLINED: 'Rechazado',
   ERROR: 'Error',
+  PENDING_REVIEW: 'Por revisar',
 };
 
 export const PAYMENT_STATUS_COLORS: Record<PaymentStatus, string> = {
   APPROVED: '#22c55e',
   DECLINED: '#f87171',
   ERROR: '#f59e0b',
+  PENDING_REVIEW: '#3b82f6',
 };
 
 export const PAYMENT_TYPE_LABELS: Record<PaymentType, string> = {

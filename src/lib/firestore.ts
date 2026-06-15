@@ -2,12 +2,14 @@ import {
   collection,
   getDocs,
   doc,
+  getDoc,
   updateDoc,
   deleteDoc,
   query,
   orderBy,
   Timestamp,
   where,
+  writeBatch,
 } from 'firebase/firestore';
 import { ref, deleteObject } from 'firebase/storage';
 import { db, storage } from './firebase';
@@ -216,6 +218,7 @@ function parsePayment(docId: string, data: Record<string, unknown>): Payment {
     id: docId,
     reference: (data.reference as string) || '',
     type: (data.type as Payment['type']) || 'subscription',
+    source: (data.source as Payment['source']) || 'wompi',
     status: (data.status as Payment['status']) || 'ERROR',
     amount,
     amountInCents: (data.amount_in_cents as number) || 0,
@@ -228,7 +231,12 @@ function parsePayment(docId: string, data: Record<string, unknown>): Payment {
     userName: (data.user_name as string) || '',
     loanId: (data.loan_id as string) || null,
     installmentNumber: (data.installment_number as number) || null,
+    installmentsToPay: (data.installments_to_pay as number) || 1,
+    proofUrl: (data.proof_url as string) || '',
+    proofName: (data.proof_name as string) || '',
+    proofContentType: (data.proof_content_type as string) || '',
     createdAt,
+    reviewedAt: data.reviewed_at instanceof Timestamp ? data.reviewed_at.toDate() : null,
   };
 }
 
@@ -246,6 +254,103 @@ export async function getPaymentsByPhone(phone: string): Promise<Payment[]> {
 export async function getPaymentsByLoanId(loanId: string): Promise<Payment[]> {
   const all = await getPayments();
   return all.filter(p => p.loanId === loanId);
+}
+
+async function findUserDocsForPayment(payment: Payment) {
+  const matched = new Map<string, Awaited<ReturnType<typeof getDocs>>['docs'][number]>();
+
+  const normalizedPhones = Array.from(
+    new Set(
+      [payment.userPhone, payment.userPhone.replace(/\s/g, '')].filter(Boolean),
+    ),
+  );
+
+  for (const phone of normalizedPhones) {
+    const usersSnap = await getDocs(
+      query(collection(db, 'users'), where('phone', '==', phone)),
+    );
+    usersSnap.docs.forEach((userDoc) => matched.set(userDoc.id, userDoc));
+  }
+
+  if (payment.userEmail) {
+    const usersByEmail = await getDocs(
+      query(collection(db, 'users'), where('email', '==', payment.userEmail)),
+    );
+    usersByEmail.docs.forEach((userDoc) => matched.set(userDoc.id, userDoc));
+  }
+
+  return Array.from(matched.values());
+}
+
+async function notifyManualPaymentApproved(payment: Payment): Promise<void> {
+  try {
+    await fetch('/api/notify-manual-payment-approval', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        paymentId: payment.id,
+        paymentType: payment.type,
+        amount: payment.amount,
+        amountInCents: payment.amountInCents,
+        userName: payment.userName,
+        email: payment.userEmail,
+        phone: payment.userPhone,
+        loanId: payment.loanId,
+        installmentNumber: payment.installmentNumber,
+        installmentsToPay: payment.installmentsToPay,
+      }),
+    });
+  } catch (error) {
+    console.error('notifyManualPaymentApproved error', error);
+  }
+}
+
+export async function approveManualPayment(payment: Payment): Promise<void> {
+  if (payment.source !== 'manual' || payment.status !== 'PENDING_REVIEW') return;
+
+  const batch = writeBatch(db);
+  const paymentRef = doc(db, 'payments', payment.id);
+  batch.update(paymentRef, {
+    status: 'APPROVED',
+    reviewed_at: Timestamp.now(),
+    updated_at: Timestamp.now(),
+  });
+
+  if (payment.type === 'subscription') {
+    const userDocs = await findUserDocsForPayment(payment);
+    userDocs.forEach((userDoc) => {
+      batch.update(userDoc.ref, {
+        isSubscribed: true,
+        updatedAt: Timestamp.now(),
+      });
+    });
+  }
+
+  if (payment.type === 'installment' && payment.loanId) {
+    const loanRef = doc(db, 'loan_request', payment.loanId);
+    const loanSnap = await getDoc(loanRef);
+    if (loanSnap.exists()) {
+      const data = loanSnap.data() as Record<string, unknown>;
+      const currentPaid = (data.installments_paid as number) || 0;
+      const totalInstallments = (data.installments as number) || currentPaid;
+      const nextPaid = Math.min(currentPaid + Math.max(payment.installmentsToPay, 1), totalInstallments);
+      batch.update(loanRef, {
+        installments_paid: nextPaid,
+        updated_at: Timestamp.now(),
+      });
+    }
+  }
+
+  await batch.commit();
+  await notifyManualPaymentApproved(payment);
+}
+
+export async function rejectManualPayment(paymentId: string): Promise<void> {
+  await updateDoc(doc(db, 'payments', paymentId), {
+    status: 'DECLINED',
+    reviewed_at: Timestamp.now(),
+    updated_at: Timestamp.now(),
+  });
 }
 
 // Budget

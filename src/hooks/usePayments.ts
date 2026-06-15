@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { getPayments } from '@/lib/firestore';
+import { approveManualPayment, getPayments, rejectManualPayment } from '@/lib/firestore';
 import { Payment } from '@/lib/types';
 
 export function usePayments() {
@@ -26,5 +26,15 @@ export function usePayments() {
     fetchPayments();
   }, []);
 
-  return { payments, loading, error, refetch: fetchPayments };
+  const approve = async (payment: Payment) => {
+    await approveManualPayment(payment);
+    await fetchPayments();
+  };
+
+  const reject = async (paymentId: string) => {
+    await rejectManualPayment(paymentId);
+    await fetchPayments();
+  };
+
+  return { payments, loading, error, refetch: fetchPayments, approve, reject };
 }

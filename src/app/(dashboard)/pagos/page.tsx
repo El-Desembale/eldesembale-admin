@@ -4,6 +4,7 @@ import { useState, useMemo, useEffect, useCallback } from 'react';
 import { usePayments } from '@/hooks/usePayments';
 import { useLoans } from '@/hooks/useLoans';
 import { useUsers } from '@/hooks/useUsers';
+import { PaymentCard } from '@/components/PaymentCard';
 import { PaymentStatusBadge } from '@/components/PaymentStatusBadge';
 import { Payment, LoanRequest } from '@/lib/types';
 import { isInMora, getDaysOverdue } from '@/lib/mora';
@@ -11,7 +12,7 @@ import { wompiFeeFromGross } from '@/lib/loan-calc';
 import { getBudgetConfig, setBudgetConfig } from '@/lib/firestore';
 import Link from 'next/link';
 
-type Tab = 'overview' | 'loans' | 'subscriptions';
+type Tab = 'overview' | 'loans' | 'subscriptions' | 'reviews';
 
 const formatCOP = (amount: number) =>
   new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 }).format(amount);
@@ -20,7 +21,7 @@ const formatDate = (date: Date) =>
   date.toLocaleDateString('es-CO', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 
 export default function PagosPage() {
-  const { payments, loading: loadingPayments, error, refetch } = usePayments();
+  const { payments, loading: loadingPayments, error, refetch, approve, reject } = usePayments();
   const { loans, loading: loadingLoans } = useLoans();
   const { users } = useUsers();
   const [tab, setTab] = useState<Tab>('overview');
@@ -29,6 +30,7 @@ export default function PagosPage() {
   const [toDate, setToDate] = useState('');
   const [totalCapital, setTotalCapital] = useState<number>(0);
   const [loadingBudget, setLoadingBudget] = useState(true);
+  const [actingPaymentId, setActingPaymentId] = useState<string | null>(null);
 
   useEffect(() => {
     getBudgetConfig().then(config => {
@@ -220,6 +222,36 @@ export default function PagosPage() {
     );
   }, [users, filteredPayments, search, fromDate, toDate]);
 
+  const pendingManualPayments = useMemo(() => {
+    const items = payments.filter((payment) => payment.source === 'manual' && payment.status === 'PENDING_REVIEW');
+    if (!search) return items;
+    const q = search.toLowerCase();
+    return items.filter((payment) =>
+      payment.userName.toLowerCase().includes(q) ||
+      payment.userPhone.includes(q) ||
+      (payment.proofName || '').toLowerCase().includes(q) ||
+      (payment.loanId || '').toLowerCase().includes(q)
+    );
+  }, [payments, search]);
+
+  const handleApprovePayment = useCallback(async (payment: Payment) => {
+    try {
+      setActingPaymentId(payment.id);
+      await approve(payment);
+    } finally {
+      setActingPaymentId(null);
+    }
+  }, [approve]);
+
+  const handleRejectPayment = useCallback(async (paymentId: string) => {
+    try {
+      setActingPaymentId(paymentId);
+      await reject(paymentId);
+    } finally {
+      setActingPaymentId(null);
+    }
+  }, [reject]);
+
   const loanTracking = useMemo(() => {
     const paymentsByLoan: Record<string, Payment[]> = {};
     for (const p of filteredPayments) {
@@ -282,6 +314,7 @@ export default function PagosPage() {
           { key: 'overview' as const, label: 'Resumen Financiero' },
           { key: 'loans' as const, label: 'Seguimiento Préstamos' },
           { key: 'subscriptions' as const, label: 'Suscripciones' },
+          { key: 'reviews' as const, label: 'Comprobantes' },
         ]).map(t => (
           <button
             key={t.key}
@@ -350,6 +383,22 @@ export default function PagosPage() {
           />
           <LoansTrackingView items={loanTracking} />
         </>
+      ) : tab === 'reviews' ? (
+        <>
+          <input
+            type="text"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Buscar por nombre, teléfono o archivo..."
+            className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-slate-900 placeholder-slate-400 focus:outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400 transition-colors mb-6 shadow-sm"
+          />
+          <ManualReviewsView
+            items={pendingManualPayments}
+            actingPaymentId={actingPaymentId}
+            onApprove={handleApprovePayment}
+            onReject={handleRejectPayment}
+          />
+        </>
       ) : (
         <>
           <input
@@ -362,6 +411,41 @@ export default function PagosPage() {
           <SubscriptionsView items={subscribedUsers} />
         </>
       )}
+    </div>
+  );
+}
+
+function ManualReviewsView({
+  items,
+  actingPaymentId,
+  onApprove,
+  onReject,
+}: {
+  items: Payment[];
+  actingPaymentId: string | null;
+  onApprove: (payment: Payment) => Promise<void> | void;
+  onReject: (paymentId: string) => Promise<void> | void;
+}) {
+  if (items.length === 0) {
+    return (
+      <div className="bg-white border border-slate-200 rounded-2xl p-8 text-center shadow-sm">
+        <p className="text-slate-900 font-semibold">No hay comprobantes pendientes</p>
+        <p className="text-slate-400 text-sm mt-1">Los comprobantes manuales aparecerán aquí para revisión.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-3">
+      {items.map((payment) => (
+        <PaymentCard
+          key={payment.id}
+          payment={payment}
+          busy={actingPaymentId === payment.id}
+          onApprove={onApprove}
+          onReject={onReject}
+        />
+      ))}
     </div>
   );
 }

@@ -37,6 +37,10 @@ function calcInstallmentDate(base: Date, index: number, paymentPeriod: string): 
 export async function POST(req: NextRequest) {
   const body: NewLoanPayload = await req.json();
   const { loanId, amount, phone, installments, paymentPeriod, interest, createdAt, clientName, installmentAmounts, totalCliente } = body;
+  const adminAppUrl =
+    process.env.ADMIN_APP_URL ||
+    process.env.NEXT_PUBLIC_ADMIN_APP_URL ||
+    'https://eldesembale-admin-infiny-software-s-projects.vercel.app';
 
   const smtpUser = process.env.SMTP_USER;
   const smtpPass = process.env.SMTP_PASS;
@@ -59,7 +63,7 @@ export async function POST(req: NextRequest) {
   }).format(amount);
 
   const clientDisplay = clientName ? `${clientName} (${phone})` : phone;
-  const loanUrl = `https://eldesembale-admin.vercel.app/solicitudes/${loanId}`;
+  const loanUrl = `${adminAppUrl}/solicitudes/${loanId}`;
 
   const fmtCOP = (n: number) => new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 }).format(n);
 
