@@ -47,6 +47,7 @@ app.*.map.json
 /android/app/release
 .vercel
 .firebase/
+firebase.generated.json
 .env.local
 .next/
 node_modules/
