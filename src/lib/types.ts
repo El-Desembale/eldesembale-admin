@@ -37,6 +37,8 @@ export interface LoanRequest {
   id: string;
   amount: number;
   createdAt: Date;
+  /** Fecha de desembolso (base real del cronograma). Null si aún no se desembolsa. */
+  disbursedAt?: Date | null;
   installments: number;
   interest: number;
   paymentPeriod: string;

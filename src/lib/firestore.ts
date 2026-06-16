@@ -43,11 +43,15 @@ function parseLoan(docId: string, data: Record<string, unknown>): LoanRequest {
   const createdAt = data.created_at instanceof Timestamp
     ? data.created_at.toDate()
     : new Date();
+  const disbursedAt = data.disbursed_at instanceof Timestamp
+    ? data.disbursed_at.toDate()
+    : null;
 
   return {
     id: docId,
     amount: (data.amount as number) || 0,
     createdAt,
+    disbursedAt,
     installments: (data.installments as number) || 0,
     interest: (data.interest as number) || 0,
     paymentPeriod: (data.payment_period as string) || '',
